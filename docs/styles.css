@@ -1037,8 +1037,14 @@ dd {
   }
 
   .choices {
+    display: flex;
+    flex-wrap: nowrap;
     gap: 8px;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .choice {
+    flex: 1 1 0;
+    min-width: 0;
   }
 }
 
@@ -1061,6 +1067,10 @@ dd {
     font-size: 11px;
     line-height: 1.3;
     word-break: keep-all;
+  }
+
+  .choices {
+    gap: 6px;
   }
 
   .control-copy,
