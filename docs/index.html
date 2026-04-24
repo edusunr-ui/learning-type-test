@@ -1,0 +1,100 @@
+﻿<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>학습유형검사</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-brand">
+        <img class="brand-logo brand-logo--header" src="./assets/su-him-hufs-logo.png" alt="운정 본원 수학의힘 외대 HS어학원">
+        <p class="eyebrow">운정 수학의힘∫외대HS어학원</p>
+        <h1>학습유형검사</h1>
+      </div>
+      <div class="header-actions">
+        <button class="icon-button" id="resetBtn" type="button" title="응답 초기화" aria-label="응답 초기화">↺</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="homeView" class="landing-view" aria-label="검사 정보 입력">
+        <div class="landing-copy">
+          <p class="eyebrow">수학의힘/외대HS 학습유형검사</p>
+          <h2>학생 정보를 입력하고 검사를 시작하세요.</h2>
+        </div>
+        <div class="student-fields">
+          <label><span>학교명</span><input id="schoolInput" type="text" autocomplete="organization"></label>
+          <label>
+            <span>학년</span>
+            <select id="gradeInput" autocomplete="off">
+              <option value="">선택</option>
+              <option value="1">1학년</option>
+              <option value="2">2학년</option>
+              <option value="3">3학년</option>
+            </select>
+          </label>
+          <label><span>이름</span><input id="nameInput" type="text" autocomplete="name"></label>
+        </div>
+        <div class="level-tabs" role="tablist" aria-label="검사급 선택">
+          <button class="level-tab is-active" type="button" data-level="elementary">초등부</button>
+          <button class="level-tab" type="button" data-level="middle">중등부</button>
+          <button class="level-tab" type="button" data-level="high">고등부</button>
+        </div>
+        <button class="primary-button start-button" id="startPurposeBtn" type="button">검사 시작하기</button>
+      </section>
+
+      <section id="purposeView" class="purpose-view" aria-label="검사 취지" hidden>
+        <div class="purpose-copy">
+          <p class="eyebrow">검사 취지</p>
+          <h2>학습유형검사의 취지</h2>
+          <p>수학의힘/외대HS 학습유형검사는 학생 개개인의 학습 성향을 과학적이고 체계적으로 분석하여, 맞춤형 수학 학습 전략을 제공하기 위해 고안되었습니다.</p>
+          <p>단순한 성적 평가가 아닌, 학습 동기, 태도, 문제 접근 방식 등 심층적인 학습 행동 특성을 기반으로 학생의 학습 유형을 분류하고, 각 유형에 최적화된 지도 방향을 설정하는 것이 목적입니다.</p>
+          <h3>핵심 취지 요약</h3>
+          <ul>
+            <li>수학 학습의 과정 중심 진단</li>
+            <li>자기주도 학습 능력 향상을 위한 학습 전략 안내</li>
+            <li>학생 개개인의 잠재력을 최대로 이끌어내기 위한 기반 마련</li>
+            <li>학생-학부모-교사의 소통 도구로서의 역할</li>
+          </ul>
+          <p>수학의힘/외대HS 학습유형검사는 단순한 테스트가 아닌, 학생의 성장을 이끄는 안내서입니다. 아이가 공부를 ‘잘하게’ 하는 것뿐만 아니라, 스스로 공부의 주인이 되어가는 길을 열어주고자 하는 수학의힘/외대HS의 철학이 담겨 있습니다. 이 검사를 통해, 학습이 ‘억지로’가 아니라 ‘이해하고 성장하는’ 여정이 되기를 기대합니다.</p>
+          <h3>검사를 통해 기대되는 효과</h3>
+          <h4>1. 학생에게</h4>
+          <p>자신이 어떻게 배우는지를 자각하게 되어, 학습에 대한 이해와 자신감이 향상됩니다. 학습 과정에서 반복되는 비효율적 습관을 인식하고 개선할 수 있습니다.</p>
+          <p>수학에 대한 부정적인 감정이나 스트레스를 줄이고, 긍정적인 태도를 형성합니다. 자신의 유형에 맞는 맞춤형 공부 방법을 통해 학습 효율이 높아집니다.</p>
+          <h4>2. 학부모에게</h4>
+          <p>자녀의 학습 성향과 강점·약점을 이해하고, 가정에서 적절한 지원과 격려를 할 수 있게 됩니다. 자녀의 학습 유형을 토대로 과도한 비교나 기대를 줄이고, 개별적인 성장에 초점을 맞추게 됩니다.</p>
+          <h3>◆ 수학의힘/외대HS 학습유형검사란?</h3>
+          <p>이 검사는 단순히 공부를 잘하냐 못하냐를 보는 테스트가 아닙니다.</p>
+          <p>학생의 학습 동기, 태도, 문제 접근 방식 등 수학 학습에 영향을 주는 여러 요인을 종합적으로 분석하여, 그 학생만을 위한 맞춤형 학습 전략을 제시하는 검사입니다.</p>
+          <p>수학의힘/외대HS는 수학을 잘 가르치는 학원 이전에, 학생 한 명, 한 명을 깊이 이해하고 성장시킬 수 있는 교육을 지향합니다. 이 검사는 바로 그 시작점이 되어 줍니다.</p>
+        </div>
+        <div class="purpose-actions">
+          <button class="secondary-button" id="backHomeBtn" type="button">정보 수정</button>
+          <button class="primary-button" id="startSurveyBtn" type="button">질문지 시작</button>
+        </div>
+      </section>
+
+      <section id="surveyView" class="workspace question-workspace" hidden>
+        <article class="answer-panel" aria-label="문항 응답">
+          <div class="progress-wrap">
+            <div><p class="progress-label">응답 진행률</p><strong id="progressText">0 / 42</strong></div>
+            <div class="progress-track" aria-hidden="true"><div id="progressBar"></div></div>
+          </div>
+          <div class="quick-actions">
+            <button type="button" id="prevQuestionBtn">이전</button>
+            <button type="button" id="nextQuestionBtn">다음</button>
+            <button type="button" id="firstMissingBtn">미응답 이동</button>
+            <button type="button" id="showResultBtn" disabled>결과 보기</button>
+          </div>
+          <div id="answerGrid" class="answer-grid"></div>
+          <div id="questionNav" class="question-nav" aria-label="문항 바로가기"></div>
+        </article>
+      </section>
+    </main>
+
+    <script src="./questions.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
