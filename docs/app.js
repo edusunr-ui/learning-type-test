@@ -232,7 +232,7 @@ function getQuestions() {
 
 function choiceLabel(score) {
   return {
-    1: "매우 그렇지 않다",
+    1: "매우\n그렇지 않다",
     2: "그렇지 않다",
     3: "보통이다",
     4: "그렇다",
