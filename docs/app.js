@@ -99,6 +99,7 @@ function loadState() {
     state.answers = saved.answers || {};
     state.currentQuestion = Number(saved.currentQuestion || 1);
     state.info = { ...state.info, ...(saved.info || {}) };
+    state.stage = "home";
   } catch {
     sessionStorage.removeItem(STORAGE_KEY);
   }
