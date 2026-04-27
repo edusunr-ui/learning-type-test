@@ -206,6 +206,30 @@ function $(selector) {
   return document.querySelector(selector);
 }
 
+function loadStoredResultPayload(attemptId) {
+  if (!attemptId) return null;
+
+  const sessionRaw = sessionStorage.getItem(resultStorageKey(attemptId));
+  if (sessionRaw) {
+    localStorage.setItem(resultStorageKey(attemptId), sessionRaw);
+    return sessionRaw;
+  }
+
+  const localRaw = localStorage.getItem(resultStorageKey(attemptId));
+  if (localRaw) {
+    sessionStorage.setItem(resultStorageKey(attemptId), localRaw);
+    return localRaw;
+  }
+
+  return null;
+}
+
+function clearStoredResultPayload(attemptId) {
+  if (!attemptId) return;
+  sessionStorage.removeItem(resultStorageKey(attemptId));
+  localStorage.removeItem(resultStorageKey(attemptId));
+}
+
 function loadResult() {
   const attemptId = attemptIdFromUrl();
   if (!attemptId) {
@@ -213,7 +237,7 @@ function loadResult() {
     return null;
   }
 
-  const raw = sessionStorage.getItem(resultStorageKey(attemptId));
+  const raw = loadStoredResultPayload(attemptId);
   if (!raw) {
     window.location.replace("./index.html?new=1");
     return null;
@@ -222,7 +246,7 @@ function loadResult() {
   try {
     return JSON.parse(raw);
   } catch {
-    sessionStorage.removeItem(resultStorageKey(attemptId));
+    clearStoredResultPayload(attemptId);
     window.location.replace("./index.html?new=1");
     return null;
   }
@@ -419,7 +443,7 @@ $("#restartLink").addEventListener("click", (event) => {
   event.preventDefault();
   const attemptId = attemptIdFromUrl();
   if (attemptId) {
-    sessionStorage.removeItem(resultStorageKey(attemptId));
+    clearStoredResultPayload(attemptId);
     sessionStorage.removeItem(surveyStorageKey(attemptId));
     clearPendingSheetsPayload(attemptId);
   }

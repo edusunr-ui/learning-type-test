@@ -123,6 +123,18 @@ function pendingSheetsStorageKey(attemptId = state.attemptId) {
   return `${PENDING_SHEETS_STORAGE_NAMESPACE}:${attemptId}`;
 }
 
+function persistResultPayload(payload) {
+  const serialized = JSON.stringify(payload);
+  sessionStorage.setItem(resultStorageKey(payload.attemptId), serialized);
+  localStorage.setItem(resultStorageKey(payload.attemptId), serialized);
+}
+
+function clearStoredResultPayload(attemptId = state.attemptId) {
+  if (!attemptId) return;
+  sessionStorage.removeItem(resultStorageKey(attemptId));
+  localStorage.removeItem(resultStorageKey(attemptId));
+}
+
 function sheetsEndpoint() {
   const endpoint = String(SHEETS_CONFIG.endpoint || "").trim();
   return endpoint || "";
@@ -476,10 +488,7 @@ async function showResult() {
     createdAt,
   };
 
-  sessionStorage.setItem(
-    resultStorageKey(),
-    JSON.stringify(resultPayload)
-  );
+  persistResultPayload(resultPayload);
 
   const sheetsPayload = buildSheetsPayload(result, createdAt);
   markSheetsPayloadPending(sheetsPayload);
@@ -499,7 +508,7 @@ async function showResult() {
 function resetAnswers() {
   if (!confirm("현재 검사 응답을 초기화할까요?")) return;
   state.answers[answerKey()] = {};
-  sessionStorage.removeItem(resultStorageKey());
+  clearStoredResultPayload();
   clearPendingSheetsPayload();
   saveState();
   render();
