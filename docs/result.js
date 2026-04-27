@@ -1,5 +1,6 @@
 const RESULT_STORAGE_NAMESPACE = "learning-type-result-v2";
 const SURVEY_STORAGE_NAMESPACE = "learning-type-survey-v2";
+const LAST_RESULT_STORAGE_KEY = "learning-type-last-result-v1";
 const PENDING_SHEETS_STORAGE_NAMESPACE = "learning-type-pending-sheets-v1";
 const SHEETS_CONFIG = window.LEARNING_TYPE_CONFIG?.googleSheets || {};
 
@@ -42,26 +43,51 @@ function clearPendingSheetsPayload(attemptId) {
   sessionStorage.removeItem(pendingSheetsStorageKey(attemptId));
 }
 
-async function retryPendingSheetsSave(attemptId) {
+function submitSheetsPayload(payload) {
   const endpoint = sheetsEndpoint();
-  const payload = loadPendingSheetsPayload(attemptId);
   if (!endpoint || !payload) return;
 
   try {
-    await fetch(endpoint, {
-      method: "POST",
-      mode: "no-cors",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-      },
-      body: new URLSearchParams(
-        Object.entries(payload).map(([key, value]) => [key, value == null ? "" : String(value)])
-      ).toString(),
-      keepalive: true,
+    const iframeName = "google-sheets-sync-target";
+    let iframe = document.querySelector(`iframe[name="${iframeName}"]`);
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.name = iframeName;
+      iframe.hidden = true;
+      iframe.tabIndex = -1;
+      document.body.appendChild(iframe);
+    }
+
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = endpoint;
+    form.target = iframeName;
+    form.hidden = true;
+
+    Object.entries(payload).forEach(([key, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = key;
+      input.value = value == null ? "" : String(value);
+      form.appendChild(input);
     });
-    clearPendingSheetsPayload(attemptId);
+
+    document.body.appendChild(form);
+    form.submit();
+    window.setTimeout(() => form.remove(), 1000);
+    return true;
   } catch (error) {
     console.error("Retrying Google Sheets save failed.", error);
+    return false;
+  }
+}
+
+function retryPendingSheetsSave(attemptId) {
+  const payload = loadPendingSheetsPayload(attemptId);
+  if (!payload) return;
+
+  if (submitSheetsPayload(payload)) {
+    clearPendingSheetsPayload(attemptId);
   }
 }
 
@@ -224,10 +250,24 @@ function loadStoredResultPayload(attemptId) {
   return null;
 }
 
+function loadLastStoredResultPayload() {
+  const raw = localStorage.getItem(LAST_RESULT_STORAGE_KEY);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    localStorage.removeItem(LAST_RESULT_STORAGE_KEY);
+    return null;
+  }
+}
+
 function clearStoredResultPayload(attemptId) {
-  if (!attemptId) return;
-  sessionStorage.removeItem(resultStorageKey(attemptId));
-  localStorage.removeItem(resultStorageKey(attemptId));
+  if (attemptId) {
+    sessionStorage.removeItem(resultStorageKey(attemptId));
+    localStorage.removeItem(resultStorageKey(attemptId));
+  }
+  localStorage.removeItem(LAST_RESULT_STORAGE_KEY);
 }
 
 function loadResult() {
@@ -239,6 +279,11 @@ function loadResult() {
 
   const raw = loadStoredResultPayload(attemptId);
   if (!raw) {
+    const lastPayload = loadLastStoredResultPayload();
+    if (lastPayload) {
+      return lastPayload;
+    }
+
     window.location.replace("./index.html?new=1");
     return null;
   }

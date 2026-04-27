@@ -44,6 +44,7 @@ const RESULT_TYPES = {
 
 const STORAGE_NAMESPACE = "learning-type-survey-v2";
 const RESULT_STORAGE_NAMESPACE = "learning-type-result-v2";
+const LAST_RESULT_STORAGE_KEY = "learning-type-last-result-v1";
 const PENDING_SHEETS_STORAGE_NAMESPACE = "learning-type-pending-sheets-v1";
 const SHEETS_CONFIG = window.LEARNING_TYPE_CONFIG?.googleSheets || {};
 
@@ -127,12 +128,15 @@ function persistResultPayload(payload) {
   const serialized = JSON.stringify(payload);
   sessionStorage.setItem(resultStorageKey(payload.attemptId), serialized);
   localStorage.setItem(resultStorageKey(payload.attemptId), serialized);
+  localStorage.setItem(LAST_RESULT_STORAGE_KEY, serialized);
 }
 
 function clearStoredResultPayload(attemptId = state.attemptId) {
-  if (!attemptId) return;
-  sessionStorage.removeItem(resultStorageKey(attemptId));
-  localStorage.removeItem(resultStorageKey(attemptId));
+  if (attemptId) {
+    sessionStorage.removeItem(resultStorageKey(attemptId));
+    localStorage.removeItem(resultStorageKey(attemptId));
+  }
+  localStorage.removeItem(LAST_RESULT_STORAGE_KEY);
 }
 
 function sheetsEndpoint() {
@@ -167,12 +171,6 @@ function buildSheetsPayload(result, createdAt) {
   };
 }
 
-function createSheetsRequestBody(payload) {
-  return new URLSearchParams(
-    Object.entries(payload).map(([key, value]) => [key, value == null ? "" : String(value)])
-  );
-}
-
 function markSheetsPayloadPending(payload) {
   try {
     sessionStorage.setItem(pendingSheetsStorageKey(payload.attemptId), JSON.stringify(payload));
@@ -186,29 +184,38 @@ function clearPendingSheetsPayload(attemptId = state.attemptId) {
   sessionStorage.removeItem(pendingSheetsStorageKey(attemptId));
 }
 
-async function saveResultToGoogleSheets(payload) {
+function submitSheetsPayload(payload) {
   const endpoint = sheetsEndpoint();
   if (!endpoint) return false;
 
   try {
-    const body = createSheetsRequestBody(payload);
-
-    if (navigator.sendBeacon) {
-      const beaconQueued = navigator.sendBeacon(endpoint, body);
-      if (beaconQueued) {
-        return true;
-      }
+    const iframeName = "google-sheets-sync-target";
+    let iframe = document.querySelector(`iframe[name="${iframeName}"]`);
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.name = iframeName;
+      iframe.hidden = true;
+      iframe.tabIndex = -1;
+      document.body.appendChild(iframe);
     }
 
-    await fetch(endpoint, {
-      method: "POST",
-      mode: "no-cors",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-      },
-      body: body.toString(),
-      keepalive: true,
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = endpoint;
+    form.target = iframeName;
+    form.hidden = true;
+
+    Object.entries(payload).forEach(([key, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = key;
+      input.value = value == null ? "" : String(value);
+      form.appendChild(input);
     });
+
+    document.body.appendChild(form);
+    form.submit();
+    window.setTimeout(() => form.remove(), 1000);
     return true;
   } catch (error) {
     console.error("Google Sheets save failed.", error);
@@ -493,10 +500,7 @@ async function showResult() {
   const sheetsPayload = buildSheetsPayload(result, createdAt);
   markSheetsPayloadPending(sheetsPayload);
 
-  const savedToSheets = await Promise.race([
-    saveResultToGoogleSheets(sheetsPayload),
-    new Promise((resolve) => window.setTimeout(resolve, 1500)),
-  ]);
+  const savedToSheets = submitSheetsPayload(sheetsPayload);
 
   if (savedToSheets) {
     clearPendingSheetsPayload();
