@@ -31,21 +31,8 @@ const CATEGORIES = [
   { key: "intuitive", label: "직관적 접근형", code: "F" },
 ];
 
-const RESULT_TYPES = {
-  ACE: { name: "파스칼형", pdf: "./assets/results/pascal.pdf" },
-  ACF: { name: "아인슈타인형", pdf: "./assets/results/einstein.pdf" },
-  BCE: { name: "러셀형", pdf: "./assets/results/russell.pdf" },
-  BCF: { name: "가우스형", pdf: "./assets/results/gauss.pdf" },
-  ADE: { name: "뉴턴형", pdf: "./assets/results/newton.pdf" },
-  ADF: { name: "피타고라스형", pdf: "./assets/results/pythagoras.pdf" },
-  BDE: { name: "데카르트형", pdf: "./assets/results/descartes.pdf" },
-  BDF: { name: "칸트형", pdf: "./assets/results/kant.pdf" },
-};
-
 const STORAGE_NAMESPACE = "learning-type-survey-v2";
-const RESULT_STORAGE_NAMESPACE = "learning-type-result-v2";
-const LAST_RESULT_STORAGE_KEY = "learning-type-last-result-v1";
-const PENDING_SHEETS_STORAGE_NAMESPACE = "learning-type-pending-sheets-v1";
+const PENDING_SHEETS_STORAGE_NAMESPACE = "learning-type-pending-sheets-v2";
 const SHEETS_CONFIG = window.LEARNING_TYPE_CONFIG?.googleSheets || {};
 
 const state = {
@@ -59,12 +46,20 @@ const state = {
     grade: "",
     name: "",
   },
+  completion: {
+    name: "",
+    school: "",
+    grade: "",
+    levelLabel: "",
+    submittedAt: "",
+  },
 };
 
 const els = {
   homeView: document.querySelector("#homeView"),
   purposeView: document.querySelector("#purposeView"),
   surveyView: document.querySelector("#surveyView"),
+  completeView: document.querySelector("#completeView"),
   school: document.querySelector("#schoolInput"),
   grade: document.querySelector("#gradeInput"),
   name: document.querySelector("#nameInput"),
@@ -80,6 +75,9 @@ const els = {
   startPurpose: document.querySelector("#startPurposeBtn"),
   startSurvey: document.querySelector("#startSurveyBtn"),
   backHome: document.querySelector("#backHomeBtn"),
+  startNew: document.querySelector("#startNewBtn"),
+  completionName: document.querySelector("#completionName"),
+  completionMeta: document.querySelector("#completionMeta"),
   reset: document.querySelector("#resetBtn"),
 };
 
@@ -116,27 +114,8 @@ function stateStorageKey() {
   return `${STORAGE_NAMESPACE}:${state.attemptId}`;
 }
 
-function resultStorageKey(attemptId = state.attemptId) {
-  return `${RESULT_STORAGE_NAMESPACE}:${attemptId}`;
-}
-
 function pendingSheetsStorageKey(attemptId = state.attemptId) {
   return `${PENDING_SHEETS_STORAGE_NAMESPACE}:${attemptId}`;
-}
-
-function persistResultPayload(payload) {
-  const serialized = JSON.stringify(payload);
-  sessionStorage.setItem(resultStorageKey(payload.attemptId), serialized);
-  localStorage.setItem(resultStorageKey(payload.attemptId), serialized);
-  localStorage.setItem(LAST_RESULT_STORAGE_KEY, serialized);
-}
-
-function clearStoredResultPayload(attemptId = state.attemptId) {
-  if (attemptId) {
-    sessionStorage.removeItem(resultStorageKey(attemptId));
-    localStorage.removeItem(resultStorageKey(attemptId));
-  }
-  localStorage.removeItem(LAST_RESULT_STORAGE_KEY);
 }
 
 function sheetsEndpoint() {
@@ -144,9 +123,12 @@ function sheetsEndpoint() {
   return endpoint || "";
 }
 
-function buildSheetsPayload(result, createdAt) {
-  const scoreMap = Object.fromEntries(result.scores.map((item) => [item.key, Number(item.score || 0)]));
-
+function buildSheetsPayload(createdAt) {
+  const answers = getAnswersForLevel();
+  const answerList = Array.from(
+    { length: currentLevel().questionCount },
+    (_, index) => Number(answers[index + 1] || 0)
+  );
   return {
     attemptId: state.attemptId,
     createdAt,
@@ -156,17 +138,9 @@ function buildSheetsPayload(result, createdAt) {
     name: state.info.name,
     level: state.level,
     levelLabel: currentLevel().label,
-    resultCode: result.code,
-    resultType: result.type?.name || "미분류",
-    positiveScore: scoreMap.positive || 0,
-    negativeScore: scoreMap.negative || 0,
-    internalScore: scoreMap.internal || 0,
-    externalScore: scoreMap.external || 0,
-    logicalScore: scoreMap.logical || 0,
-    intuitiveScore: scoreMap.intuitive || 0,
-    positiveVsNegative: result.pairs?.[0]?.winner || "",
-    internalVsExternal: result.pairs?.[1]?.winner || "",
-    logicalVsIntuitive: result.pairs?.[2]?.winner || "",
+    questionCount: String(currentLevel().questionCount),
+    perCategory: String(currentLevel().perCategory),
+    answersJson: JSON.stringify(answerList),
     siteUrl: window.location.origin + window.location.pathname,
   };
 }
@@ -230,12 +204,12 @@ function loadState() {
 
   try {
     const saved = JSON.parse(raw);
-    if (["home", "purpose", "survey"].includes(saved.stage)) state.stage = saved.stage;
+    if (["home", "purpose", "survey", "complete"].includes(saved.stage)) state.stage = saved.stage;
     if (saved.level && LEVELS[saved.level]) state.level = saved.level;
     state.answers = saved.answers || {};
     state.currentQuestion = Number(saved.currentQuestion || 1);
     state.info = { ...state.info, ...(saved.info || {}) };
-    state.stage = "home";
+    state.completion = { ...state.completion, ...(saved.completion || {}) };
   } catch {
     sessionStorage.removeItem(stateStorageKey());
   }
@@ -252,6 +226,7 @@ function saveState() {
       answers: state.answers,
       currentQuestion: state.currentQuestion,
       info: state.info,
+      completion: state.completion,
     })
   );
 }
@@ -284,12 +259,13 @@ function categoryForQuestion(questionNumber) {
 function render() {
   const level = currentLevel();
   const answers = getAnswersForLevel();
-  const hasStageViews = els.homeView && els.purposeView && els.surveyView;
+  const hasStageViews = els.homeView && els.purposeView && els.surveyView && els.completeView;
 
   if (hasStageViews) {
     els.homeView.hidden = state.stage !== "home";
     els.purposeView.hidden = state.stage !== "purpose";
     els.surveyView.hidden = state.stage !== "survey";
+    els.completeView.hidden = state.stage !== "complete";
   }
 
   if (els.reset) {
@@ -308,6 +284,20 @@ function render() {
   els.answerGrid.innerHTML = "";
   els.answerGrid.appendChild(createQuestionCard(state.currentQuestion, answers[state.currentQuestion]));
   renderQuestionNav();
+  if (els.completionName) {
+    const fallbackName = state.completion.name || "학생";
+    els.completionName.textContent = `${fallbackName} 학생의 검사가 제출되었습니다.`;
+  }
+  if (els.completionMeta) {
+    const parts = [
+      state.completion.school,
+      state.completion.grade ? `${state.completion.grade}학년` : "",
+      state.completion.levelLabel,
+    ].filter(Boolean);
+    els.completionMeta.textContent = parts.length
+      ? `제출 정보: ${parts.join(" · ")}`
+      : "제출 내용을 학원에서 확인하고 결과를 안내드립니다.";
+  }
 
   renderProgress();
 }
@@ -448,71 +438,63 @@ function renderQuestionNav() {
   }
 }
 
-function calculateResult() {
-  const level = currentLevel();
-  const answers = getAnswersForLevel();
-  const scores = CATEGORIES.map((category, categoryIndex) => {
-    const start = categoryIndex * level.perCategory + 1;
-    let total = 0;
-    for (let q = start; q < start + level.perCategory; q += 1) {
-      total += Number(answers[q] || 0);
-    }
-    return { ...category, score: total };
-  });
-
-  const first = scores[0].score >= scores[1].score ? "A" : "B";
-  const second = scores[2].score >= scores[3].score ? "C" : "D";
-  const third = scores[4].score >= scores[5].score ? "E" : "F";
-  const code = `${first}${second}${third}`;
-
-  return {
-    code,
-    type: RESULT_TYPES[code] || { name: "미분류", pdf: "" },
-    scores,
-    pairs: [
-      { label: "긍정형 vs 부정형", winner: first === "A" ? "긍정형" : "부정형" },
-      { label: "내적동기형 vs 외적동기형", winner: second === "C" ? "내적동기형" : "외적동기형" },
-      { label: "논리적 접근형 vs 직관적 접근형", winner: third === "E" ? "논리적 접근형" : "직관적 접근형" },
-    ],
+function resetAttemptState() {
+  state.answers = {};
+  state.currentQuestion = 1;
+  state.info = {
+    school: "",
+    grade: "",
+    name: "",
   };
 }
 
-async function showResult() {
+function startNewSurvey() {
+  clearPendingSheetsPayload();
+  resetAttemptState();
+  state.completion = {
+    name: "",
+    school: "",
+    grade: "",
+    levelLabel: "",
+    submittedAt: "",
+  };
+  sessionStorage.removeItem(stateStorageKey());
+  ensureAttemptId(true);
+  setStage("home");
+}
+
+function submitSurvey() {
   if (firstMissingQuestion()) {
     markAndScrollToMissing();
     return;
   }
 
-  const result = calculateResult();
   const createdAt = new Date().toISOString();
-  const resultPayload = {
-    attemptId: state.attemptId,
-    result,
-    info: state.info,
-    level: state.level,
-    levelLabel: currentLevel().label,
-    maxScore: currentLevel().maxScore,
-    createdAt,
-  };
-
-  persistResultPayload(resultPayload);
-
-  const sheetsPayload = buildSheetsPayload(result, createdAt);
+  const sheetsPayload = buildSheetsPayload(createdAt);
   markSheetsPayloadPending(sheetsPayload);
 
   const savedToSheets = submitSheetsPayload(sheetsPayload);
 
-  if (savedToSheets) {
-    clearPendingSheetsPayload();
+  if (!savedToSheets) {
+    alert("제출 연결을 확인해 주세요. 잠시 후 다시 제출해 주세요.");
+    return;
   }
+  clearPendingSheetsPayload();
 
-  window.location.href = `./result.html?attempt=${encodeURIComponent(state.attemptId)}`;
+  state.completion = {
+    name: state.info.name,
+    school: state.info.school,
+    grade: state.info.grade,
+    levelLabel: currentLevel().label,
+    submittedAt: createdAt,
+  };
+  resetAttemptState();
+  setStage("complete");
 }
 
 function resetAnswers() {
   if (!confirm("현재 검사 응답을 초기화할까요?")) return;
   state.answers[answerKey()] = {};
-  clearStoredResultPayload();
   clearPendingSheetsPayload();
   saveState();
   render();
@@ -523,13 +505,14 @@ function bindEvents() {
   els.prevQuestion.addEventListener("click", () => moveQuestion(-1));
   els.nextQuestion.addEventListener("click", () => moveQuestion(1));
   els.firstMissing.addEventListener("click", markAndScrollToMissing);
-  els.showResult.addEventListener("click", showResult);
+  els.showResult.addEventListener("click", submitSurvey);
   els.reset.addEventListener("click", resetAnswers);
   els.startPurpose?.addEventListener("click", () => {
     if (validateInfo()) setStage("purpose");
   });
   els.startSurvey?.addEventListener("click", () => setStage("survey"));
   els.backHome?.addEventListener("click", () => setStage("home"));
+  els.startNew?.addEventListener("click", startNewSurvey);
 
   [
     ["school", els.school],

@@ -217,7 +217,8 @@ button:disabled {
 }
 
 .landing-view,
-.purpose-view {
+.purpose-view,
+.complete-view {
   display: grid;
   gap: 22px;
   margin: 0 auto;
@@ -256,6 +257,30 @@ button:disabled {
   line-height: 1.8;
   padding: clamp(22px, 4vw, 42px);
   word-break: keep-all;
+}
+
+.complete-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+  margin: 0 auto;
+  max-width: 720px;
+  padding: clamp(28px, 5vw, 46px);
+  text-align: center;
+}
+
+.complete-card p {
+  line-height: 1.7;
+  margin: 0;
+}
+
+.complete-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .purpose-copy h2 {
