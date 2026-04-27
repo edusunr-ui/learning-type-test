@@ -1,4 +1,69 @@
-const RESULT_STORAGE_KEY = "learning-type-result-v1";
+const RESULT_STORAGE_NAMESPACE = "learning-type-result-v2";
+const SURVEY_STORAGE_NAMESPACE = "learning-type-survey-v2";
+const PENDING_SHEETS_STORAGE_NAMESPACE = "learning-type-pending-sheets-v1";
+const SHEETS_CONFIG = window.LEARNING_TYPE_CONFIG?.googleSheets || {};
+
+function attemptIdFromUrl() {
+  return new URL(window.location.href).searchParams.get("attempt") || "";
+}
+
+function resultStorageKey(attemptId) {
+  return `${RESULT_STORAGE_NAMESPACE}:${attemptId}`;
+}
+
+function surveyStorageKey(attemptId) {
+  return `${SURVEY_STORAGE_NAMESPACE}:${attemptId}`;
+}
+
+function pendingSheetsStorageKey(attemptId) {
+  return `${PENDING_SHEETS_STORAGE_NAMESPACE}:${attemptId}`;
+}
+
+function sheetsEndpoint() {
+  const endpoint = String(SHEETS_CONFIG.endpoint || "").trim();
+  return endpoint || "";
+}
+
+function loadPendingSheetsPayload(attemptId) {
+  if (!attemptId) return null;
+  const raw = sessionStorage.getItem(pendingSheetsStorageKey(attemptId));
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    sessionStorage.removeItem(pendingSheetsStorageKey(attemptId));
+    return null;
+  }
+}
+
+function clearPendingSheetsPayload(attemptId) {
+  if (!attemptId) return;
+  sessionStorage.removeItem(pendingSheetsStorageKey(attemptId));
+}
+
+async function retryPendingSheetsSave(attemptId) {
+  const endpoint = sheetsEndpoint();
+  const payload = loadPendingSheetsPayload(attemptId);
+  if (!endpoint || !payload) return;
+
+  try {
+    await fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body: new URLSearchParams(
+        Object.entries(payload).map(([key, value]) => [key, value == null ? "" : String(value)])
+      ).toString(),
+      keepalive: true,
+    });
+    clearPendingSheetsPayload(attemptId);
+  } catch (error) {
+    console.error("Retrying Google Sheets save failed.", error);
+  }
+}
 
 const TYPE_DETAILS = {
   "파스칼형": {
@@ -142,17 +207,23 @@ function $(selector) {
 }
 
 function loadResult() {
-  const raw = sessionStorage.getItem(RESULT_STORAGE_KEY);
+  const attemptId = attemptIdFromUrl();
+  if (!attemptId) {
+    window.location.replace("./index.html?new=1");
+    return null;
+  }
+
+  const raw = sessionStorage.getItem(resultStorageKey(attemptId));
   if (!raw) {
-    window.location.replace("./index.html");
+    window.location.replace("./index.html?new=1");
     return null;
   }
 
   try {
     return JSON.parse(raw);
   } catch {
-    sessionStorage.removeItem(RESULT_STORAGE_KEY);
-    window.location.replace("./index.html");
+    sessionStorage.removeItem(resultStorageKey(attemptId));
+    window.location.replace("./index.html?new=1");
     return null;
   }
 }
@@ -302,6 +373,7 @@ function render() {
   $("#metaLine").textContent = "";
   $("#detailTitle").textContent = `${name}님 학습스타일 세부진단`;
   renderPdfPageImages(type, name, result, maxScore);
+  retryPendingSheetsSave(payload.attemptId);
 }
 
 function renderPdfPageImages(type, name, result, maxScore) {
@@ -343,7 +415,14 @@ function escapeHtml(value) {
 }
 
 $("#printResultBtn").addEventListener("click", () => window.print());
-$("#restartLink").addEventListener("click", () => {
-  sessionStorage.clear();
+$("#restartLink").addEventListener("click", (event) => {
+  event.preventDefault();
+  const attemptId = attemptIdFromUrl();
+  if (attemptId) {
+    sessionStorage.removeItem(resultStorageKey(attemptId));
+    sessionStorage.removeItem(surveyStorageKey(attemptId));
+    clearPendingSheetsPayload(attemptId);
+  }
+  window.location.href = "./index.html?new=1";
 });
 render();

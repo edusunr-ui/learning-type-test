@@ -42,10 +42,13 @@ const RESULT_TYPES = {
   BDF: { name: "칸트형", pdf: "./assets/results/kant.pdf" },
 };
 
-const STORAGE_KEY = "learning-type-survey-v1";
-const RESULT_STORAGE_KEY = "learning-type-result-v1";
+const STORAGE_NAMESPACE = "learning-type-survey-v2";
+const RESULT_STORAGE_NAMESPACE = "learning-type-result-v2";
+const PENDING_SHEETS_STORAGE_NAMESPACE = "learning-type-pending-sheets-v1";
+const SHEETS_CONFIG = window.LEARNING_TYPE_CONFIG?.googleSheets || {};
 
 const state = {
+  attemptId: "",
   stage: "home",
   level: "elementary",
   answers: {},
@@ -87,9 +90,123 @@ function answerKey(level = state.level) {
   return `${level}Answers`;
 }
 
+function createAttemptId() {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+
+  return `attempt-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function ensureAttemptId(forceNew = false) {
+  const url = new URL(window.location.href);
+  const existing = forceNew ? "" : url.searchParams.get("attempt");
+  const attemptId = existing || createAttemptId();
+
+  url.searchParams.set("attempt", attemptId);
+  url.searchParams.delete("new");
+  window.history.replaceState({}, "", url);
+
+  state.attemptId = attemptId;
+  return attemptId;
+}
+
+function stateStorageKey() {
+  return `${STORAGE_NAMESPACE}:${state.attemptId}`;
+}
+
+function resultStorageKey(attemptId = state.attemptId) {
+  return `${RESULT_STORAGE_NAMESPACE}:${attemptId}`;
+}
+
+function pendingSheetsStorageKey(attemptId = state.attemptId) {
+  return `${PENDING_SHEETS_STORAGE_NAMESPACE}:${attemptId}`;
+}
+
+function sheetsEndpoint() {
+  const endpoint = String(SHEETS_CONFIG.endpoint || "").trim();
+  return endpoint || "";
+}
+
+function buildSheetsPayload(result, createdAt) {
+  const scoreMap = Object.fromEntries(result.scores.map((item) => [item.key, Number(item.score || 0)]));
+
+  return {
+    attemptId: state.attemptId,
+    createdAt,
+    submittedAt: new Date().toISOString(),
+    school: state.info.school,
+    grade: state.info.grade,
+    name: state.info.name,
+    level: state.level,
+    levelLabel: currentLevel().label,
+    resultCode: result.code,
+    resultType: result.type?.name || "미분류",
+    positiveScore: scoreMap.positive || 0,
+    negativeScore: scoreMap.negative || 0,
+    internalScore: scoreMap.internal || 0,
+    externalScore: scoreMap.external || 0,
+    logicalScore: scoreMap.logical || 0,
+    intuitiveScore: scoreMap.intuitive || 0,
+    positiveVsNegative: result.pairs?.[0]?.winner || "",
+    internalVsExternal: result.pairs?.[1]?.winner || "",
+    logicalVsIntuitive: result.pairs?.[2]?.winner || "",
+    siteUrl: window.location.origin + window.location.pathname,
+  };
+}
+
+function createSheetsRequestBody(payload) {
+  return new URLSearchParams(
+    Object.entries(payload).map(([key, value]) => [key, value == null ? "" : String(value)])
+  );
+}
+
+function markSheetsPayloadPending(payload) {
+  try {
+    sessionStorage.setItem(pendingSheetsStorageKey(payload.attemptId), JSON.stringify(payload));
+  } catch (error) {
+    console.warn("Pending Google Sheets payload could not be cached.", error);
+  }
+}
+
+function clearPendingSheetsPayload(attemptId = state.attemptId) {
+  if (!attemptId) return;
+  sessionStorage.removeItem(pendingSheetsStorageKey(attemptId));
+}
+
+async function saveResultToGoogleSheets(payload) {
+  const endpoint = sheetsEndpoint();
+  if (!endpoint) return false;
+
+  try {
+    const body = createSheetsRequestBody(payload);
+
+    if (navigator.sendBeacon) {
+      const beaconQueued = navigator.sendBeacon(endpoint, body);
+      if (beaconQueued) {
+        return true;
+      }
+    }
+
+    await fetch(endpoint, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body: body.toString(),
+      keepalive: true,
+    });
+    return true;
+  } catch (error) {
+    console.error("Google Sheets save failed.", error);
+    return false;
+  }
+}
+
 function loadState() {
-  localStorage.removeItem(STORAGE_KEY);
-  const raw = sessionStorage.getItem(STORAGE_KEY);
+  ensureAttemptId(new URL(window.location.href).searchParams.get("new") === "1");
+  const raw = sessionStorage.getItem(stateStorageKey());
   if (!raw) return;
 
   try {
@@ -101,14 +218,16 @@ function loadState() {
     state.info = { ...state.info, ...(saved.info || {}) };
     state.stage = "home";
   } catch {
-    sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(stateStorageKey());
   }
 }
 
 function saveState() {
+  ensureAttemptId();
   sessionStorage.setItem(
-    STORAGE_KEY,
+    stateStorageKey(),
     JSON.stringify({
+      attemptId: state.attemptId,
       level: state.level,
       stage: state.stage,
       answers: state.answers,
@@ -339,31 +458,49 @@ function calculateResult() {
   };
 }
 
-function showResult() {
+async function showResult() {
   if (firstMissingQuestion()) {
     markAndScrollToMissing();
     return;
   }
 
   const result = calculateResult();
+  const createdAt = new Date().toISOString();
+  const resultPayload = {
+    attemptId: state.attemptId,
+    result,
+    info: state.info,
+    level: state.level,
+    levelLabel: currentLevel().label,
+    maxScore: currentLevel().maxScore,
+    createdAt,
+  };
+
   sessionStorage.setItem(
-    RESULT_STORAGE_KEY,
-    JSON.stringify({
-      result,
-      info: state.info,
-      level: state.level,
-      levelLabel: currentLevel().label,
-      maxScore: currentLevel().maxScore,
-      createdAt: new Date().toISOString(),
-    })
+    resultStorageKey(),
+    JSON.stringify(resultPayload)
   );
-  window.location.href = "./result.html";
+
+  const sheetsPayload = buildSheetsPayload(result, createdAt);
+  markSheetsPayloadPending(sheetsPayload);
+
+  const savedToSheets = await Promise.race([
+    saveResultToGoogleSheets(sheetsPayload),
+    new Promise((resolve) => window.setTimeout(resolve, 1500)),
+  ]);
+
+  if (savedToSheets) {
+    clearPendingSheetsPayload();
+  }
+
+  window.location.href = `./result.html?attempt=${encodeURIComponent(state.attemptId)}`;
 }
 
 function resetAnswers() {
   if (!confirm("현재 검사 응답을 초기화할까요?")) return;
   state.answers[answerKey()] = {};
-  sessionStorage.removeItem(RESULT_STORAGE_KEY);
+  sessionStorage.removeItem(resultStorageKey());
+  clearPendingSheetsPayload();
   saveState();
   render();
 }
