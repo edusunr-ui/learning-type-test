@@ -4,6 +4,8 @@ const SHEET_NAME = "Results";
 // Optional: leave blank to save PDFs in My Drive root.
 const PDF_FOLDER_ID = "";
 const RESULT_TEMPLATE_BASE_URL = "https://edusunr-ui.github.io/learning-type-test/assets/results";
+const CLOUD_PDF_ENDPOINT = "";
+const CLOUD_PDF_TOKEN = "";
 
 const HEADERS = [
   "attemptId",
@@ -78,7 +80,7 @@ function doPost(e) {
     const sheet = getSheet_();
     const rowIndex = findRowByAttemptId_(sheet, payload.attemptId);
     const existingRow = rowIndex > 0 ? getExistingRowMap_(sheet, rowIndex) : {};
-    const pdfInfo = copyTemplateResultPdf_(result, existingRow);
+    const pdfInfo = createResultPdf_(result, existingRow);
     const rowRecord = { ...result, ...pdfInfo };
     const rowValues = HEADERS.map((header) => rowRecord[header] || "");
 
@@ -101,6 +103,15 @@ function doPost(e) {
 
 function doGet() {
   return jsonResponse_({ ok: true, message: "Learning type sheet endpoint is running." });
+}
+
+function createResultPdf_(result, existingRow) {
+  const endpoint = String(CLOUD_PDF_ENDPOINT || "").trim();
+  if (endpoint) {
+    return requestCloudResultPdf_(result);
+  }
+
+  return copyTemplateResultPdf_(result, existingRow);
 }
 
 function getSheet_() {
@@ -267,6 +278,43 @@ function fetchTemplatePdfBlob_(result) {
   }
 
   return response.getBlob();
+}
+
+function requestCloudResultPdf_(result) {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+
+  if (String(CLOUD_PDF_TOKEN || "").trim()) {
+    headers.Authorization = `Bearer ${String(CLOUD_PDF_TOKEN).trim()}`;
+  }
+
+  const response = UrlFetchApp.fetch(String(CLOUD_PDF_ENDPOINT).trim(), {
+    method: "post",
+    contentType: "application/json",
+    headers,
+    payload: JSON.stringify(result),
+    muteHttpExceptions: true,
+  });
+
+  const statusCode = response.getResponseCode();
+  const text = response.getContentText();
+  let data = {};
+  try {
+    data = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`Cloud PDF response parse failed: ${error} / body=${text}`);
+  }
+
+  if (statusCode < 200 || statusCode >= 300 || !data.ok) {
+    throw new Error(`Cloud PDF generation failed: status=${statusCode} body=${text}`);
+  }
+
+  return {
+    resultPdfFileId: String(data.resultPdfFileId || ""),
+    resultPdfUrl: String(data.resultPdfUrl || ""),
+    resultPdfName: String(data.resultPdfName || ""),
+  };
 }
 
 function buildPdfName_(result) {

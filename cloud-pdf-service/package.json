@@ -1,0 +1,14 @@
+{
+  "name": "learning-type-cloud-pdf-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "googleapis": "^144.0.0",
+    "playwright": "^1.55.0"
+  }
+}

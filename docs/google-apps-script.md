@@ -1,7 +1,11 @@
 # Google Sheets + 결과 PDF 자동 저장 설정
 
 학생은 제출 완료 화면만 보고, 결과는 Google Sheets와 Google Drive PDF 파일로 선생님만 확인하는 운영용 설정입니다.
-이 버전은 기존 검사결과확인 페이지에서 사용하던 유형별 결과 PDF 형식을 그대로 저장하는 방식입니다.
+
+PDF 저장 방식은 2가지입니다.
+
+1. 기본 방식: 유형별 기존 PDF 템플릿을 그대로 복사 저장
+2. 권장 방식: 클라우드 PDF 서비스가 `teacher-result.html`을 렌더링해서 기존 결과확인 페이지 형식 그대로 저장
 
 ## 준비할 것
 
@@ -125,3 +129,28 @@ window.LEARNING_TYPE_CONFIG = {
 - 시트에서 `resultPdfUrl`을 클릭하면 선생님이 기존 결과지 형식 PDF를 바로 열 수 있습니다.
 - 같은 `attemptId`로 다시 제출되면 기존 행을 업데이트하고, 기존 PDF는 휴지통으로 보낸 뒤 새 PDF를 만듭니다.
 - 학생 이름까지 PDF 본문 첫 장에 인쇄되게 하려면, 그건 기존 템플릿 PDF 위에 오버레이를 얹는 다음 단계 작업이 필요합니다.
+
+## 7. 기존 결과확인 페이지 형식 그대로 저장하려면
+
+`Apps Script`만으로는 웹 결과 페이지를 그대로 PDF로 렌더링할 수 없어서, 클라우드 PDF 생성기를 같이 써야 합니다.
+
+저장소 안에 아래 서버 코드가 추가되어 있습니다.
+
+- [cloud-pdf-service/README.md](Z:\01. 개인 폴더\04. 강다슬\학습유형검사\cloud-pdf-service\README.md)
+- [cloud-pdf-service/src/index.mjs](Z:\01. 개인 폴더\04. 강다슬\학습유형검사\cloud-pdf-service\src\index.mjs)
+
+이 서비스를 배포한 뒤 `Code.gs` 상단에 아래 값을 채우면 됩니다.
+
+```javascript
+const CLOUD_PDF_ENDPOINT = "https://your-service.example.com/generate-result-pdf";
+const CLOUD_PDF_TOKEN = "원하는_임의_토큰";
+```
+
+이 값을 채우면:
+
+- 학생 제출
+- Apps Script가 결과 계산
+- 클라우드 PDF 서비스가 `teacher-result.html`을 렌더링
+- 기존 결과확인 페이지 형식 PDF 생성
+- Google Drive 저장
+- 시트에 `resultPdfUrl` 기록
