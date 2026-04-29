@@ -42,10 +42,20 @@
             <h2>제출된 검사 결과</h2>
           </div>
           <div class="admin-toolbar-actions">
+            <label class="admin-sort">
+              <span class="sr-only">정렬 기준</span>
+              <select id="adminSortSelect">
+                <option value="submittedAt-desc">최신 제출순</option>
+                <option value="name-asc">이름순</option>
+                <option value="grade-asc">학년순</option>
+                <option value="school-asc">학교순</option>
+              </select>
+            </label>
             <label class="admin-search">
               <span class="sr-only">검색</span>
               <input id="adminSearchInput" type="search" placeholder="이름, 학교, 유형 검색">
             </label>
+            <button id="adminDeleteBtn" type="button" disabled>선택 삭제</button>
             <button id="adminRefreshBtn" type="button">새로고침</button>
             <button id="adminLogoutBtn" type="button">로그아웃</button>
           </div>
@@ -54,6 +64,14 @@
         <div class="admin-summary-bar">
           <p id="adminResultCount">결과를 불러오는 중입니다.</p>
           <p class="admin-helper">개별 카드의 `결과 보기`를 누르면 기존 결과지 형식으로 새 창이 열립니다.</p>
+        </div>
+
+        <div class="admin-selection-bar">
+          <label class="admin-check-all">
+            <input id="adminSelectAll" type="checkbox">
+            <span>전체 선택</span>
+          </label>
+          <p id="adminSelectionCount">선택된 결과가 없습니다.</p>
         </div>
 
         <div id="adminResultsEmpty" class="admin-empty" hidden>

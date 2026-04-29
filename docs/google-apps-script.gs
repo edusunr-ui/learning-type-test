@@ -149,6 +149,8 @@ function handleAdminAction_(action, params) {
       return listResults_(params);
     case "getResult":
       return getResult_(params);
+    case "deleteResults":
+      return deleteResults_(params);
     default:
       return { ok: false, message: `Unknown action: ${action}` };
   }
@@ -227,6 +229,46 @@ function getResult_(params) {
   return {
     ok: true,
     payload: buildTeacherResultPayload_(row),
+  };
+}
+
+function deleteResults_(params) {
+  requireAdminSession_(params);
+
+  const attemptIds = parseAttemptIds_(params.attemptIds);
+  if (!attemptIds.length) {
+    throw new Error("삭제할 결과가 없습니다.");
+  }
+
+  const sheet = getSheet_();
+  const attemptIdSet = new Set(attemptIds);
+  const deletedPdfFileIds = [];
+
+  if (sheet.getLastRow() >= 2) {
+    const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
+    for (let index = values.length - 1; index >= 0; index -= 1) {
+      const row = rowToMap_(values[index]);
+      if (!attemptIdSet.has(String(row.attemptId || "").trim())) continue;
+
+      if (String(row.resultPdfFileId || "").trim()) {
+        deletedPdfFileIds.push(String(row.resultPdfFileId).trim());
+      }
+
+      sheet.deleteRow(index + 2);
+    }
+  }
+
+  deletedPdfFileIds.forEach((fileId) => {
+    try {
+      DriveApp.getFileById(fileId).setTrashed(true);
+    } catch (error) {
+      Logger.log(`PDF cleanup skipped for ${fileId}: ${error}`);
+    }
+  });
+
+  return {
+    ok: true,
+    deletedCount: attemptIds.length,
   };
 }
 
@@ -354,6 +396,24 @@ function parseAnswers_(answersJson, questionCount) {
   }
 
   return normalized;
+}
+
+function parseAttemptIds_(attemptIdsJson) {
+  const raw = String(attemptIdsJson || "").trim();
+  if (!raw) return [];
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`attemptIds parse failed: ${error}`);
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("attemptIds must be an array.");
+  }
+
+  return parsed.map((value) => String(value || "").trim()).filter(Boolean);
 }
 
 function createResultPdf_(result, existingRow) {

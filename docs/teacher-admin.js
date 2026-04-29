@@ -6,6 +6,7 @@ const SHEETS_CONFIG = window.LEARNING_TYPE_CONFIG?.googleSheets || {};
 const adminState = {
   token: "",
   results: [],
+  selectedAttemptIds: new Set(),
 };
 
 const adminEls = {
@@ -14,9 +15,13 @@ const adminEls = {
   loginForm: document.querySelector("#adminLoginForm"),
   passwordInput: document.querySelector("#adminPasswordInput"),
   loginMessage: document.querySelector("#adminLoginMessage"),
+  sortSelect: document.querySelector("#adminSortSelect"),
   searchInput: document.querySelector("#adminSearchInput"),
+  deleteBtn: document.querySelector("#adminDeleteBtn"),
   refreshBtn: document.querySelector("#adminRefreshBtn"),
   logoutBtn: document.querySelector("#adminLogoutBtn"),
+  selectAll: document.querySelector("#adminSelectAll"),
+  selectionCount: document.querySelector("#adminSelectionCount"),
   resultCount: document.querySelector("#adminResultCount"),
   empty: document.querySelector("#adminResultsEmpty"),
   list: document.querySelector("#adminResultsList"),
@@ -105,13 +110,77 @@ function setPortalVisible(visible) {
 
 function filteredResults() {
   const keyword = String(adminEls.searchInput.value || "").trim().toLowerCase();
-  if (!keyword) return adminState.results;
-
-  return adminState.results.filter((item) =>
+  const filtered = !keyword
+    ? [...adminState.results]
+    : adminState.results.filter((item) =>
     [item.name, item.school, item.resultType, item.grade, item.levelLabel]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(keyword))
-  );
+    );
+
+  const sortValue = String(adminEls.sortSelect.value || "submittedAt-desc");
+  const [field, direction] = sortValue.split("-");
+  const factor = direction === "desc" ? -1 : 1;
+
+  filtered.sort((left, right) => {
+    if (field === "submittedAt") {
+      return (parseDateValue(right.submittedAt) - parseDateValue(left.submittedAt)) * (direction === "desc" ? 1 : -1);
+    }
+
+    if (field === "grade") {
+      const leftGrade = Number(left.grade || 0);
+      const rightGrade = Number(right.grade || 0);
+      if (leftGrade !== rightGrade) {
+        return (leftGrade - rightGrade) * factor;
+      }
+    }
+
+    const leftValue = String(left[field] || "").trim();
+    const rightValue = String(right[field] || "").trim();
+    return leftValue.localeCompare(rightValue, "ko") * factor;
+  });
+
+  return filtered;
+}
+
+function parseDateValue(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function updateSelectionSummary() {
+  const visibleAttemptIds = filteredResults().map((item) => item.attemptId).filter(Boolean);
+  const selectedVisibleCount = visibleAttemptIds.filter((attemptId) => adminState.selectedAttemptIds.has(attemptId)).length;
+  const totalSelectedCount = adminState.selectedAttemptIds.size;
+
+  adminEls.selectionCount.textContent = totalSelectedCount
+    ? `${totalSelectedCount}건이 선택되었습니다.`
+    : "선택된 결과가 없습니다.";
+
+  adminEls.selectAll.disabled = visibleAttemptIds.length === 0;
+  adminEls.selectAll.checked = visibleAttemptIds.length > 0 && selectedVisibleCount === visibleAttemptIds.length;
+  adminEls.selectAll.indeterminate =
+    selectedVisibleCount > 0 && selectedVisibleCount < visibleAttemptIds.length;
+  adminEls.deleteBtn.disabled = totalSelectedCount === 0;
+}
+
+function toggleSelection(attemptId, checked) {
+  if (!attemptId) return;
+  if (checked) {
+    adminState.selectedAttemptIds.add(attemptId);
+  } else {
+    adminState.selectedAttemptIds.delete(attemptId);
+  }
+  updateSelectionSummary();
+}
+
+function syncSelectedAttemptIds() {
+  const validAttemptIds = new Set(adminState.results.map((item) => item.attemptId));
+  Array.from(adminState.selectedAttemptIds).forEach((attemptId) => {
+    if (!validAttemptIds.has(attemptId)) {
+      adminState.selectedAttemptIds.delete(attemptId);
+    }
+  });
 }
 
 function formatSubmittedAt(value) {
@@ -146,9 +215,17 @@ function renderResults() {
       (item) => `
         <article class="admin-result-card">
           <div class="admin-result-head">
-            <div>
+            <div class="admin-result-title-wrap">
+              <label class="admin-item-check">
+                <input type="checkbox" data-attempt-id="${escapeHtml(item.attemptId)}" class="admin-select-item" ${
+                  adminState.selectedAttemptIds.has(item.attemptId) ? "checked" : ""
+                }>
+                <span>선택</span>
+              </label>
+              <div>
               <p class="admin-result-name">${escapeHtml(item.name || "학생")}</p>
               <p class="admin-result-meta">${escapeHtml(item.school || "-")} · ${escapeHtml(item.grade || "-")}학년 · ${escapeHtml(item.levelLabel || "-")}</p>
+              </div>
             </div>
             <span class="admin-result-type">${escapeHtml(item.resultType || "미분류")} (${escapeHtml(item.resultCode || "-")})</span>
           </div>
@@ -172,12 +249,19 @@ function renderResults() {
   adminEls.list.querySelectorAll(".admin-open-result").forEach((button) => {
     button.addEventListener("click", () => openTeacherResult(button.dataset.attemptId || ""));
   });
+  adminEls.list.querySelectorAll(".admin-select-item").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      toggleSelection(checkbox.dataset.attemptId || "", checkbox.checked);
+    });
+  });
+  updateSelectionSummary();
 }
 
 async function loadResults() {
   adminEls.resultCount.textContent = "결과를 불러오는 중입니다.";
   const data = await postAdminAction("listResults", { token: adminState.token });
   adminState.results = Array.isArray(data.items) ? data.items : [];
+  syncSelectedAttemptIds();
   renderResults();
 }
 
@@ -257,8 +341,43 @@ async function bootstrapAdminPortal() {
   }
 }
 
+async function deleteSelectedResults() {
+  const attemptIds = Array.from(adminState.selectedAttemptIds);
+  if (!attemptIds.length) return;
+
+  if (!window.confirm(`선택한 ${attemptIds.length}건의 결과를 삭제할까요?`)) {
+    return;
+  }
+
+  try {
+    await postAdminAction("deleteResults", {
+      token: adminState.token,
+      attemptIds: JSON.stringify(attemptIds),
+    });
+    adminState.selectedAttemptIds.clear();
+    await loadResults();
+  } catch (error) {
+    alert(error.message || "삭제에 실패했습니다.");
+  }
+}
+
 adminEls.loginForm.addEventListener("submit", handleLogin);
+adminEls.sortSelect.addEventListener("change", renderResults);
 adminEls.searchInput.addEventListener("input", renderResults);
+adminEls.selectAll.addEventListener("change", () => {
+  filteredResults().forEach((item) => {
+    if (!item.attemptId) return;
+    if (adminEls.selectAll.checked) {
+      adminState.selectedAttemptIds.add(item.attemptId);
+    } else {
+      adminState.selectedAttemptIds.delete(item.attemptId);
+    }
+  });
+  renderResults();
+});
+adminEls.deleteBtn.addEventListener("click", () => {
+  deleteSelectedResults().catch((error) => alert(error.message || "삭제에 실패했습니다."));
+});
 adminEls.refreshBtn.addEventListener("click", () => {
   loadResults().catch((error) => alert(error.message || "새로고침에 실패했습니다."));
 });
@@ -272,6 +391,7 @@ adminEls.logoutBtn.addEventListener("click", async () => {
   }
   clearSession();
   adminState.results = [];
+  adminState.selectedAttemptIds.clear();
   adminEls.list.innerHTML = "";
   setPortalVisible(false);
   setLoginMessage("");
