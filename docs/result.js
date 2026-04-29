@@ -487,11 +487,12 @@ $("#printResultBtn").addEventListener("click", () => window.print());
 $("#restartLink").addEventListener("click", (event) => {
   event.preventDefault();
   const attemptId = attemptIdFromUrl();
+  const isTeacherView = window.location.pathname.endsWith("/teacher-result.html") || window.location.pathname.endsWith("teacher-result.html");
   if (attemptId) {
     clearStoredResultPayload(attemptId);
     sessionStorage.removeItem(surveyStorageKey(attemptId));
     clearPendingSheetsPayload(attemptId);
   }
-  window.location.href = "./index.html?new=1";
+  window.location.href = isTeacherView ? "./teacher-admin.html" : "./index.html?new=1";
 });
 render();
