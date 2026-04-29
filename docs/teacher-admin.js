@@ -213,14 +213,15 @@ function renderResults() {
   adminEls.list.innerHTML = items
     .map(
       (item) => `
-        <article class="admin-result-card">
+        <article class="admin-result-card${adminState.selectedAttemptIds.has(item.attemptId) ? " is-selected" : ""}">
           <div class="admin-result-head">
             <div class="admin-result-title-wrap">
               <label class="admin-item-check">
                 <input type="checkbox" data-attempt-id="${escapeHtml(item.attemptId)}" class="admin-select-item" ${
                   adminState.selectedAttemptIds.has(item.attemptId) ? "checked" : ""
                 }>
-                <span>선택</span>
+                <span class="admin-item-check-indicator" aria-hidden="true"></span>
+                <span class="admin-item-check-text">선택</span>
               </label>
               <div>
               <p class="admin-result-name">${escapeHtml(item.name || "학생")}</p>
@@ -252,6 +253,7 @@ function renderResults() {
   adminEls.list.querySelectorAll(".admin-select-item").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
       toggleSelection(checkbox.dataset.attemptId || "", checkbox.checked);
+      checkbox.closest(".admin-result-card")?.classList.toggle("is-selected", checkbox.checked);
     });
   });
   updateSelectionSummary();

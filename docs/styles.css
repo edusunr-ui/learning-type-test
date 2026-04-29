@@ -428,6 +428,12 @@ button:disabled {
   padding: 20px;
 }
 
+.admin-result-card.is-selected {
+  background: rgba(27, 111, 104, 0.08);
+  border-color: rgba(27, 111, 104, 0.45);
+  box-shadow: 0 18px 36px rgba(27, 111, 104, 0.12);
+}
+
 .admin-result-head {
   align-items: start;
   display: flex;
@@ -440,6 +446,58 @@ button:disabled {
   align-items: start;
   display: flex;
   gap: 12px;
+}
+
+.admin-item-check {
+  cursor: pointer;
+  margin-top: 2px;
+}
+
+.admin-item-check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.admin-item-check-indicator {
+  align-items: center;
+  background: #fff;
+  border: 2px solid rgba(27, 111, 104, 0.35);
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 22px;
+  height: 22px;
+  justify-content: center;
+  transition: background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+  width: 22px;
+}
+
+.admin-item-check-indicator::after {
+  content: "";
+  border-bottom: 2px solid #fff;
+  border-right: 2px solid #fff;
+  height: 9px;
+  opacity: 0;
+  transform: rotate(45deg) scale(0.8);
+  transition: opacity 180ms ease, transform 180ms ease;
+  width: 5px;
+}
+
+.admin-item-check input:checked + .admin-item-check-indicator {
+  background: var(--teal);
+  border-color: var(--teal);
+  transform: scale(1.04);
+}
+
+.admin-item-check input:checked + .admin-item-check-indicator::after {
+  opacity: 1;
+  transform: rotate(45deg) scale(1);
+}
+
+.admin-item-check-text {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .admin-result-name {
