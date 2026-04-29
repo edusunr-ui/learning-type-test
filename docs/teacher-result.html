@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>학습유형검사 결과</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script>
+      (function bootstrapTeacherPayload() {
+        const url = new URL(window.location.href);
+        const payloadParam = url.searchParams.get("payload");
+        if (!payloadParam) return;
+
+        const decodeBase64Utf8 = (value) => {
+          const binary = atob(value);
+          const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+          return new TextDecoder("utf-8").decode(bytes);
+        };
+
+        try {
+          const payload = JSON.parse(decodeBase64Utf8(payloadParam));
+          const attemptId = payload.attemptId || `teacher-export-${Date.now()}`;
+          payload.attemptId = attemptId;
+
+          const serialized = JSON.stringify(payload);
+          sessionStorage.setItem(`learning-type-result-v2:${attemptId}`, serialized);
+          localStorage.setItem(`learning-type-result-v2:${attemptId}`, serialized);
+          localStorage.setItem("learning-type-last-result-v1", serialized);
+
+          url.searchParams.delete("payload");
+          url.searchParams.set("attempt", attemptId);
+          window.history.replaceState({}, "", url.toString());
+        } catch (error) {
+          console.error("Teacher export payload bootstrap failed.", error);
+        }
+      })();
+    </script>
+  </head>
+  <body class="result-page">
+    <header class="result-hero">
+      <img class="brand-logo" src="./assets/su-him-hufs-logo-transparent.png" alt="수학의힘∫외대HS어학원">
+      <h1 id="personalTitle">학습유형검사 결과</h1>
+    </header>
+
+    <main class="result-main">
+      <section class="personal-result">
+        <div class="result-icon" aria-hidden="true">
+          <span>!</span>
+        </div>
+        <div>
+          <p id="studentLine" class="student-line">학생의 학습 스타일을 분석했습니다.</p>
+          <p id="metaLine" class="meta-line"></p>
+        </div>
+      </section>
+
+      <section class="detail-section">
+        <div>
+          <p class="eyebrow">상세 해설 원문</p>
+          <h2 id="detailTitle">결과 PDF 상세 해설</h2>
+        </div>
+        <div id="pdfPageImages" class="pdf-page-images"></div>
+      </section>
+
+      <div class="result-actions">
+        <a id="restartLink" class="primary-link" href="./index.html">다시 검사하기</a>
+        <button class="primary-button" type="button" id="printResultBtn">인쇄/PDF 저장</button>
+      </div>
+    </main>
+
+    <script src="./result.js"></script>
+  </body>
+</html>
