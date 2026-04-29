@@ -121,3 +121,4 @@ https://edusunr-ui.github.io/learning-type-test/teacher-admin.html
 - 선생님만 `teacher-admin.html`에서 로그인 후 결과를 확인합니다.
 - 결과지 출력은 브라우저 인쇄로 진행하면 예전 결과 페이지 형식 그대로 사용할 수 있습니다.
 - 비밀번호를 바꾸려면 Apps Script의 `ADMIN_PASSWORD`를 수정한 뒤 다시 배포해야 합니다.
+- 선생님 페이지에서 결과를 `삭제`하면 목록에서는 사라지지만, 구글 시트 행은 지워지지 않고 `isDeleted=true`, `deletedAt`만 기록됩니다.

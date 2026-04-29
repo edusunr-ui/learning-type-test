@@ -39,6 +39,8 @@ const HEADERS = [
   "resultPdfFileId",
   "resultPdfUrl",
   "resultPdfName",
+  "isDeleted",
+  "deletedAt",
 ];
 
 const CATEGORIES = [
@@ -194,6 +196,7 @@ function listResults_(params) {
   const items = values
     .map((row) => rowToMap_(row))
     .filter((row) => String(row.attemptId || "").trim())
+    .filter((row) => !isDeletedRow_(row))
     .sort(compareSubmittedAtDesc_)
     .slice(0, ADMIN_RESULTS_LIMIT)
     .map((row) => ({
@@ -226,6 +229,9 @@ function getResult_(params) {
   }
 
   const row = getExistingRowMap_(sheet, rowIndex);
+  if (isDeletedRow_(row)) {
+    throw new Error("삭제된 결과입니다.");
+  }
   return {
     ok: true,
     payload: buildTeacherResultPayload_(row),
@@ -242,33 +248,28 @@ function deleteResults_(params) {
 
   const sheet = getSheet_();
   const attemptIdSet = new Set(attemptIds);
-  const deletedPdfFileIds = [];
+  const deletedAt = new Date().toISOString();
+  const isDeletedColumn = HEADERS.indexOf("isDeleted") + 1;
+  const deletedAtColumn = HEADERS.indexOf("deletedAt") + 1;
+  let deletedCount = 0;
 
   if (sheet.getLastRow() >= 2) {
     const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
-    for (let index = values.length - 1; index >= 0; index -= 1) {
+    for (let index = 0; index < values.length; index += 1) {
       const row = rowToMap_(values[index]);
       if (!attemptIdSet.has(String(row.attemptId || "").trim())) continue;
+      if (isDeletedRow_(row)) continue;
 
-      if (String(row.resultPdfFileId || "").trim()) {
-        deletedPdfFileIds.push(String(row.resultPdfFileId).trim());
-      }
-
-      sheet.deleteRow(index + 2);
+      const targetRow = index + 2;
+      sheet.getRange(targetRow, isDeletedColumn).setValue("true");
+      sheet.getRange(targetRow, deletedAtColumn).setValue(deletedAt);
+      deletedCount += 1;
     }
   }
 
-  deletedPdfFileIds.forEach((fileId) => {
-    try {
-      DriveApp.getFileById(fileId).setTrashed(true);
-    } catch (error) {
-      Logger.log(`PDF cleanup skipped for ${fileId}: ${error}`);
-    }
-  });
-
   return {
     ok: true,
-    deletedCount: attemptIds.length,
+    deletedCount,
   };
 }
 
@@ -414,6 +415,10 @@ function parseAttemptIds_(attemptIdsJson) {
   }
 
   return parsed.map((value) => String(value || "").trim()).filter(Boolean);
+}
+
+function isDeletedRow_(row) {
+  return String(row.isDeleted || "").trim().toLowerCase() === "true";
 }
 
 function createResultPdf_(result, existingRow) {
