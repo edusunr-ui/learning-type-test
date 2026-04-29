@@ -1,89 +1,84 @@
-# Google Sheets + 결과 PDF 자동 저장 설정
+# Google Sheets + 선생님 전용 결과 페이지 설정
 
-학생은 제출 완료 화면만 보고, 결과는 Google Sheets와 Google Drive PDF 파일로 선생님만 확인하는 운영용 설정입니다.
+학생은 검사만 제출하고, 결과는 선생님만 비밀번호로 로그인해서 확인하는 운영 방식입니다.
 
-PDF 저장 방식은 2가지입니다.
+구성은 이렇게 됩니다.
 
-1. 기본 방식: 유형별 기존 PDF 템플릿을 그대로 복사 저장
-2. 권장 방식: 클라우드 PDF 서비스가 `teacher-result.html`을 렌더링해서 기존 결과확인 페이지 형식 그대로 저장
+1. 학생용 페이지 `index.html`
+- 검사 응답만 제출
+- 제출 완료 화면만 표시
 
-## 준비할 것
+2. 선생님용 페이지 `teacher-admin.html`
+- 비밀번호 로그인
+- 결과 목록 조회
+- 개별 결과지 열기
+- 기존 결과지 형식으로 브라우저 인쇄 가능
 
-1. 결과를 저장할 Google Sheets
-2. Apps Script 웹앱
-3. 결과 PDF를 저장할 Google Drive 폴더
-   비워두면 내 드라이브 루트에 저장됩니다.
+3. Apps Script
+- 학생 제출 데이터 저장
+- 결과 계산
+- 선생님 로그인 세션 발급
+- 결과 목록/상세 API 제공
 
-## 1. 시트 ID와 폴더 ID 준비
+## 1. 준비할 값
 
-### 스프레드시트 ID
-
-예를 들어 시트 주소가 아래와 같다면:
-
-```text
-https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz1234567890/edit
-```
-
-ID는 아래 부분입니다.
-
-```text
-1AbCdEfGhIjKlMnOpQrStUvWxYz1234567890
-```
-
-### Drive 폴더 ID
-
-결과 PDF를 따로 저장할 폴더를 만들어 두었다면, 폴더 주소에서 ID를 복사합니다.
-
-예를 들어:
-
-```text
-https://drive.google.com/drive/folders/1XyZaBcDeFgHiJkLmNoPqRsTuVwXyZ123
-```
-
-폴더 ID는 아래 부분입니다.
-
-```text
-1XyZaBcDeFgHiJkLmNoPqRsTuVwXyZ123
-```
-
-## 2. Apps Script 코드 넣기
-
-구글 시트에서 `확장 프로그램 > Apps Script`로 들어간 뒤, `Code.gs` 전체를
-`[google-apps-script.gs](Z:\01. 개인 폴더\04. 강다슬\학습유형검사\docs\google-apps-script.gs)`의 내용으로 교체하세요.
-
-바꿔야 할 상수는 맨 위 3개입니다.
+Apps Script 상단에서 아래 값을 직접 채워 주세요.
 
 ```javascript
-const SPREADSHEET_ID = "여기에_실제_구글시트_ID";
+const SPREADSHEET_ID = "여기에_실제_구글시트_ID를_넣으세요";
 const SHEET_NAME = "Results";
-const PDF_FOLDER_ID = "여기에_드라이브_폴더_ID";
+const PDF_FOLDER_ID = "";
+const ADMIN_PASSWORD = "여기에_선생님용_비밀번호를_넣으세요";
 ```
 
-폴더를 따로 지정하지 않을 거면 이렇게 둬도 됩니다.
+선택 항목:
 
 ```javascript
-const PDF_FOLDER_ID = "";
+const CLOUD_PDF_ENDPOINT = "";
+const CLOUD_PDF_TOKEN = "";
 ```
 
-## 3. 웹앱 배포
+`PDF_FOLDER_ID`는 기존처럼 PDF를 Drive에 저장할 때만 필요합니다.  
+선생님 전용 결과 페이지만 쓸 거면 비워 둬도 됩니다.
 
-1. 저장
-2. 오른쪽 위 `배포`
-3. `새 배포` 또는 `배포 관리 > 수정`
-4. 유형은 `웹 앱`
-5. 실행 계정은 `나`
-6. 액세스 권한은 `모든 사용자`
-7. 배포 후 나온 웹앱 URL 복사
+## 2. Apps Script 코드 교체
 
-브라우저에서 그 URL을 직접 열었을 때 아래처럼 보이면 정상입니다.
+구글 시트에서:
+
+1. `확장 프로그램 > Apps Script`
+2. `Code.gs` 전체 삭제
+3. 저장소의 `docs/google-apps-script.gs` 전체 복붙
+4. `SPREADSHEET_ID`, `ADMIN_PASSWORD` 값 수정
+5. 저장
+
+저장소 파일:
+[google-apps-script.gs](\\?\UNC\ARSPomHS1\기획운영D\01. 개인 폴더\04. 강다슬\학습유형검사\docs\google-apps-script.gs)
+
+## 3. 웹앱 다시 배포
+
+1. Apps Script에서 `배포`
+2. `배포 관리`
+3. 기존 웹앱 `수정` 또는 `새 배포`
+4. 유형 `웹 앱`
+5. 액세스 권한 `모든 사용자`
+6. 배포
+
+배포 후 웹앱 URL이 그대로일 수도 있고 바뀔 수도 있습니다.
+
+브라우저에서 URL을 직접 열었을 때 아래처럼 보이면 정상입니다.
 
 ```json
 {"ok":true,"message":"Learning type sheet endpoint is running."}
 ```
 
-## 4. 사이트 연결
+## 4. 사이트 설정
 
-`[sheets-config.js](Z:\01. 개인 폴더\04. 강다슬\학습유형검사\docs\sheets-config.js)`의 `endpoint`에 방금 배포한 웹앱 URL을 넣습니다.
+`docs/sheets-config.js`의 `endpoint`에 방금 배포한 웹앱 URL이 들어 있어야 합니다.
+
+파일:
+[sheets-config.js](\\?\UNC\ARSPomHS1\기획운영D\01. 개인 폴더\04. 강다슬\학습유형검사\docs\sheets-config.js)
+
+형식:
 
 ```javascript
 window.LEARNING_TYPE_CONFIG = {
@@ -93,64 +88,36 @@ window.LEARNING_TYPE_CONFIG = {
 };
 ```
 
-## 5. 저장되는 항목
+## 5. 선생님 전용 페이지 주소
 
-시트에는 아래 항목이 저장됩니다.
+배포 반영 후 선생님이 여는 주소:
 
-- 학생 정보: 학교명, 학년, 이름, 검사급
-- 원본 응답: `answersJson`
-- 계산 결과: `resultCode`, `resultType`
-- 6개 영역 점수
-- 3개 비교 결과
-- 결과 PDF 파일 정보
-  - `resultPdfFileId`
-  - `resultPdfUrl`
-  - `resultPdfName`
-
-## 6. PDF 파일 형태
-
-이 설정은 결과유형별 기존 PDF 템플릿을 그대로 Google Drive에 복사 저장하는 방식입니다.
-즉, 기존 검사결과확인 페이지에서 열리던 결과지 형식과 동일한 PDF가 저장됩니다.
-
-현재 저장되는 PDF는:
-
-- 유형별 기존 결과지 디자인을 그대로 사용
-- 학생별로 파일명이 다르게 저장됨
-- PDF 본문 안에 학생 이름이 새로 인쇄되지는 않음
-
-예:
-
-- `홍길동_러셀형_20260429_1530.pdf`
-- `김민지_가우스형_20260429_1542.pdf`
-
-## 운영 메모
-
-- 학생 화면에서는 결과를 직접 볼 수 없습니다.
-- 시트에서 `resultPdfUrl`을 클릭하면 선생님이 기존 결과지 형식 PDF를 바로 열 수 있습니다.
-- 같은 `attemptId`로 다시 제출되면 기존 행을 업데이트하고, 기존 PDF는 휴지통으로 보낸 뒤 새 PDF를 만듭니다.
-- 학생 이름까지 PDF 본문 첫 장에 인쇄되게 하려면, 그건 기존 템플릿 PDF 위에 오버레이를 얹는 다음 단계 작업이 필요합니다.
-
-## 7. 기존 결과확인 페이지 형식 그대로 저장하려면
-
-`Apps Script`만으로는 웹 결과 페이지를 그대로 PDF로 렌더링할 수 없어서, 클라우드 PDF 생성기를 같이 써야 합니다.
-
-저장소 안에 아래 서버 코드가 추가되어 있습니다.
-
-- [cloud-pdf-service/README.md](Z:\01. 개인 폴더\04. 강다슬\학습유형검사\cloud-pdf-service\README.md)
-- [cloud-pdf-service/src/index.mjs](Z:\01. 개인 폴더\04. 강다슬\학습유형검사\cloud-pdf-service\src\index.mjs)
-
-이 서비스를 배포한 뒤 `Code.gs` 상단에 아래 값을 채우면 됩니다.
-
-```javascript
-const CLOUD_PDF_ENDPOINT = "https://your-service.example.com/generate-result-pdf";
-const CLOUD_PDF_TOKEN = "원하는_임의_토큰";
+```text
+https://edusunr-ui.github.io/learning-type-test/teacher-admin.html
 ```
 
-이 값을 채우면:
+여기서:
 
-- 학생 제출
-- Apps Script가 결과 계산
-- 클라우드 PDF 서비스가 `teacher-result.html`을 렌더링
-- 기존 결과확인 페이지 형식 PDF 생성
-- Google Drive 저장
-- 시트에 `resultPdfUrl` 기록
+1. `ADMIN_PASSWORD`로 로그인
+2. 제출된 결과 목록 확인
+3. `결과 보기` 클릭
+4. 기존 결과지 형식 페이지 확인
+5. 브라우저 `인쇄 / PDF 저장`
+
+## 6. 결과 목록에서 보이는 항목
+
+- 제출 시각
+- 학교명
+- 학년
+- 이름
+- 검사급
+- 결과 코드
+- 결과 유형
+- 기존에 저장된 PDF 링크가 있으면 `저장된 PDF`
+
+## 7. 운영 메모
+
+- 학생은 결과 페이지를 직접 볼 수 없습니다.
+- 선생님만 `teacher-admin.html`에서 로그인 후 결과를 확인합니다.
+- 결과지 출력은 브라우저 인쇄로 진행하면 예전 결과 페이지 형식 그대로 사용할 수 있습니다.
+- 비밀번호를 바꾸려면 Apps Script의 `ADMIN_PASSWORD`를 수정한 뒤 다시 배포해야 합니다.

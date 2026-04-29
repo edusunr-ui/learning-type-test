@@ -1,4 +1,4 @@
-const SPREADSHEET_ID = "여기에_실제_구글시트_ID";
+const SPREADSHEET_ID = "여기에_실제_구글시트_ID를_넣으세요";
 const SHEET_NAME = "Results";
 
 // Optional: leave blank to save PDFs in My Drive root.
@@ -6,6 +6,11 @@ const PDF_FOLDER_ID = "";
 const RESULT_TEMPLATE_BASE_URL = "https://edusunr-ui.github.io/learning-type-test/assets/results";
 const CLOUD_PDF_ENDPOINT = "";
 const CLOUD_PDF_TOKEN = "";
+
+// Teacher portal login password.
+const ADMIN_PASSWORD = "여기에_선생님용_비밀번호를_넣으세요";
+const ADMIN_SESSION_HOURS = 8;
+const ADMIN_RESULTS_LIMIT = 300;
 
 const HEADERS = [
   "attemptId",
@@ -57,61 +62,172 @@ const RESULT_TYPES = {
 };
 
 const RESULT_PDF_SLUGS = {
-  "파스칼형": "pascal",
-  "아인슈타인형": "einstein",
-  "러셀형": "russell",
-  "가우스형": "gauss",
-  "뉴턴형": "newton",
-  "피타고라스형": "pythagoras",
-  "데카르트형": "descartes",
-  "칸트형": "kant",
+  파스칼형: "pascal",
+  아인슈타인형: "einstein",
+  러셀형: "russell",
+  가우스형: "gauss",
+  뉴턴형: "newton",
+  피타고라스형: "pythagoras",
+  데카르트형: "descartes",
+  칸트형: "kant",
 };
 
 const LEVEL_DEFAULTS = {
-  elementary: { questionCount: 42, perCategory: 7 },
-  middle: { questionCount: 60, perCategory: 10 },
-  high: { questionCount: 60, perCategory: 10 },
+  elementary: { questionCount: 42, perCategory: 7, maxScore: 35 },
+  middle: { questionCount: 60, perCategory: 10, maxScore: 50 },
+  high: { questionCount: 60, perCategory: 10, maxScore: 50 },
 };
 
-function doPost(e) {
-  try {
-    const payload = normalizePayload_(e.parameter || {});
-    const result = calculateResult_(payload);
-    const sheet = getSheet_();
-    const rowIndex = findRowByAttemptId_(sheet, payload.attemptId);
-    const existingRow = rowIndex > 0 ? getExistingRowMap_(sheet, rowIndex) : {};
-    const pdfInfo = createResultPdf_(result, existingRow);
-    const rowRecord = { ...result, ...pdfInfo };
-    const rowValues = HEADERS.map((header) => rowRecord[header] || "");
+const ADMIN_SESSION_PREFIX = "adminSession:";
 
-    if (rowIndex > 0) {
-      sheet.getRange(rowIndex, 1, 1, HEADERS.length).setValues([rowValues]);
-    } else {
-      sheet.appendRow(rowValues);
+function doPost(e) {
+  const params = (e && e.parameter) || {};
+  try {
+    const action = String(params.action || "").trim();
+
+    if (action) {
+      return responseFromData_(handleAdminAction_(action, params), params);
     }
 
-    return jsonResponse_({
-      ok: true,
-      attemptId: payload.attemptId,
-      resultCode: result.resultCode,
-      resultPdfUrl: pdfInfo.resultPdfUrl,
-    });
+    return responseFromData_(handleSurveySubmit_(params), params);
   } catch (error) {
-    return jsonResponse_({ ok: false, message: String(error) });
+    return responseFromData_({ ok: false, message: String(error) }, params);
   }
 }
 
-function doGet() {
-  return jsonResponse_({ ok: true, message: "Learning type sheet endpoint is running." });
-}
-
-function createResultPdf_(result, existingRow) {
-  const endpoint = String(CLOUD_PDF_ENDPOINT || "").trim();
-  if (endpoint) {
-    return requestCloudResultPdf_(result);
+function doGet(e) {
+  const params = (e && e.parameter) || {};
+  const action = String(params.action || "").trim();
+  try {
+    if (action && action !== "status") {
+      return responseFromData_(handleAdminAction_(action, params), params);
+    }
+  } catch (error) {
+    return responseFromData_({ ok: false, message: String(error) }, params);
   }
 
-  return copyTemplateResultPdf_(result, existingRow);
+  if (action === "status") {
+    return responseFromData_({ ok: true, message: "Learning type sheet endpoint is running." }, params);
+  }
+
+  return responseFromData_({ ok: true, message: "Learning type sheet endpoint is running." }, params);
+}
+
+function handleSurveySubmit_(params) {
+  const payload = normalizePayload_(params);
+  const result = calculateResult_(payload);
+  const sheet = getSheet_();
+  const rowIndex = findRowByAttemptId_(sheet, payload.attemptId);
+  const existingRow = rowIndex > 0 ? getExistingRowMap_(sheet, rowIndex) : {};
+  const pdfInfo = createResultPdf_(result, existingRow);
+  const rowRecord = { ...result, ...pdfInfo };
+  const rowValues = HEADERS.map((header) => rowRecord[header] || "");
+
+  if (rowIndex > 0) {
+    sheet.getRange(rowIndex, 1, 1, HEADERS.length).setValues([rowValues]);
+  } else {
+    sheet.appendRow(rowValues);
+  }
+
+  return {
+    ok: true,
+    attemptId: payload.attemptId,
+    resultCode: result.resultCode,
+    resultPdfUrl: pdfInfo.resultPdfUrl,
+  };
+}
+
+function handleAdminAction_(action, params) {
+  cleanupAdminSessions_();
+
+  switch (action) {
+    case "login":
+      return loginAdmin_(params);
+    case "logout":
+      return logoutAdmin_(params);
+    case "listResults":
+      return listResults_(params);
+    case "getResult":
+      return getResult_(params);
+    default:
+      return { ok: false, message: `Unknown action: ${action}` };
+  }
+}
+
+function loginAdmin_(params) {
+  const password = String(params.password || "").trim();
+  if (!String(ADMIN_PASSWORD || "").trim()) {
+    throw new Error("ADMIN_PASSWORD is not configured.");
+  }
+  if (!password) {
+    throw new Error("비밀번호를 입력해 주세요.");
+  }
+  if (password !== String(ADMIN_PASSWORD).trim()) {
+    throw new Error("비밀번호가 올바르지 않습니다.");
+  }
+
+  const session = createAdminSession_();
+  return {
+    ok: true,
+    token: session.token,
+    expiresAt: session.expiresAt,
+  };
+}
+
+function logoutAdmin_(params) {
+  const token = requireAdminSessionToken_(params);
+  deleteAdminSession_(token);
+  return { ok: true };
+}
+
+function listResults_(params) {
+  requireAdminSession_(params);
+
+  const sheet = getSheet_();
+  if (sheet.getLastRow() < 2) {
+    return { ok: true, items: [] };
+  }
+
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
+  const items = values
+    .map((row) => rowToMap_(row))
+    .filter((row) => String(row.attemptId || "").trim())
+    .sort(compareSubmittedAtDesc_)
+    .slice(0, ADMIN_RESULTS_LIMIT)
+    .map((row) => ({
+      attemptId: String(row.attemptId || ""),
+      submittedAt: String(row.submittedAt || ""),
+      school: String(row.school || ""),
+      grade: String(row.grade || ""),
+      name: String(row.name || ""),
+      levelLabel: String(row.levelLabel || ""),
+      resultCode: String(row.resultCode || ""),
+      resultType: String(row.resultType || ""),
+      resultPdfUrl: String(row.resultPdfUrl || ""),
+    }));
+
+  return { ok: true, items };
+}
+
+function getResult_(params) {
+  requireAdminSession_(params);
+
+  const attemptId = String(params.attemptId || "").trim();
+  if (!attemptId) {
+    throw new Error("attemptId is required.");
+  }
+
+  const sheet = getSheet_();
+  const rowIndex = findRowByAttemptId_(sheet, attemptId);
+  if (rowIndex < 0) {
+    throw new Error("해당 결과를 찾을 수 없습니다.");
+  }
+
+  const row = getExistingRowMap_(sheet, rowIndex);
+  return {
+    ok: true,
+    payload: buildTeacherResultPayload_(row),
+  };
 }
 
 function getSheet_() {
@@ -140,7 +256,11 @@ function findRowByAttemptId_(sheet, attemptId) {
 
 function getExistingRowMap_(sheet, rowIndex) {
   const values = sheet.getRange(rowIndex, 1, 1, HEADERS.length).getValues()[0];
-  return Object.fromEntries(HEADERS.map((header, index) => [header, values[index]]));
+  return rowToMap_(values);
+}
+
+function rowToMap_(rowValues) {
+  return Object.fromEntries(HEADERS.map((header, index) => [header, rowValues[index]]));
 }
 
 function normalizePayload_(payload) {
@@ -201,8 +321,8 @@ function calculateResult_(payload) {
     questionCount: String(questionCount),
     perCategory: String(perCategory),
     answersJson: JSON.stringify(answers),
-    resultCode: resultCode,
-    resultType: resultType,
+    resultCode,
+    resultType,
     positiveScore: String(scores[0].score),
     negativeScore: String(scores[1].score),
     internalScore: String(scores[2].score),
@@ -234,6 +354,15 @@ function parseAnswers_(answersJson, questionCount) {
   }
 
   return normalized;
+}
+
+function createResultPdf_(result, existingRow) {
+  const endpoint = String(CLOUD_PDF_ENDPOINT || "").trim();
+  if (endpoint) {
+    return requestCloudResultPdf_(result);
+  }
+
+  return copyTemplateResultPdf_(result, existingRow);
 }
 
 function copyTemplateResultPdf_(result, existingRow) {
@@ -323,6 +452,133 @@ function buildPdfName_(result) {
     : Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd_HHmm");
   const safeName = String(result.name || "학생").replace(/[\\/:*?"<>|]/g, "_");
   return `${safeName}_${result.resultType}_${submitted}.pdf`;
+}
+
+function buildTeacherResultPayload_(row) {
+  const levelConfig = LEVEL_DEFAULTS[String(row.level || "").trim()] || LEVEL_DEFAULTS.middle;
+
+  return {
+    attemptId: String(row.attemptId || ""),
+    info: {
+      school: String(row.school || ""),
+      grade: String(row.grade || ""),
+      name: String(row.name || ""),
+      level: String(row.level || ""),
+      levelLabel: String(row.levelLabel || ""),
+      submittedAt: String(row.submittedAt || ""),
+    },
+    maxScore: Number(levelConfig.maxScore || 50),
+    result: {
+      type: {
+        code: String(row.resultCode || ""),
+        name: String(row.resultType || "미분류"),
+      },
+      scores: [
+        { label: "긍정형", score: Number(row.positiveScore || 0) },
+        { label: "부정형", score: Number(row.negativeScore || 0) },
+        { label: "내적동기형", score: Number(row.internalScore || 0) },
+        { label: "외적동기형", score: Number(row.externalScore || 0) },
+        { label: "논리적 접근형", score: Number(row.logicalScore || 0) },
+        { label: "직관적 접근형", score: Number(row.intuitiveScore || 0) },
+      ],
+      pairs: [
+        { left: "긍정형", right: "부정형", winner: String(row.positiveVsNegative || "") },
+        { left: "내적동기형", right: "외적동기형", winner: String(row.internalVsExternal || "") },
+        { left: "논리적 접근형", right: "직관적 접근형", winner: String(row.logicalVsIntuitive || "") },
+      ],
+    },
+  };
+}
+
+function requireAdminSessionToken_(params) {
+  const token = String(params.token || "").trim();
+  if (!token) {
+    throw new Error("로그인 세션이 필요합니다.");
+  }
+  return token;
+}
+
+function requireAdminSession_(params) {
+  const token = requireAdminSessionToken_(params);
+  const properties = PropertiesService.getScriptProperties();
+  const raw = properties.getProperty(`${ADMIN_SESSION_PREFIX}${token}`);
+  if (!raw) {
+    throw new Error("세션이 만료되었습니다. 다시 로그인해 주세요.");
+  }
+
+  let session;
+  try {
+    session = JSON.parse(raw);
+  } catch (error) {
+    properties.deleteProperty(`${ADMIN_SESSION_PREFIX}${token}`);
+    throw new Error(`세션을 읽을 수 없습니다: ${error}`);
+  }
+
+  if (!session.expiresAt || Number(session.expiresAt) <= Date.now()) {
+    properties.deleteProperty(`${ADMIN_SESSION_PREFIX}${token}`);
+    throw new Error("세션이 만료되었습니다. 다시 로그인해 주세요.");
+  }
+
+  return session;
+}
+
+function createAdminSession_() {
+  const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
+  const expiresAt = Date.now() + Number(ADMIN_SESSION_HOURS || 8) * 60 * 60 * 1000;
+  PropertiesService.getScriptProperties().setProperty(
+    `${ADMIN_SESSION_PREFIX}${token}`,
+    JSON.stringify({ token, expiresAt })
+  );
+  return { token, expiresAt };
+}
+
+function deleteAdminSession_(token) {
+  PropertiesService.getScriptProperties().deleteProperty(`${ADMIN_SESSION_PREFIX}${token}`);
+}
+
+function cleanupAdminSessions_() {
+  const properties = PropertiesService.getScriptProperties();
+  const all = properties.getProperties();
+  const now = Date.now();
+
+  Object.keys(all).forEach((key) => {
+    if (!key.startsWith(ADMIN_SESSION_PREFIX)) return;
+    try {
+      const session = JSON.parse(all[key]);
+      if (!session.expiresAt || Number(session.expiresAt) <= now) {
+        properties.deleteProperty(key);
+      }
+    } catch (error) {
+      properties.deleteProperty(key);
+    }
+  });
+}
+
+function compareSubmittedAtDesc_(a, b) {
+  const aTime = parseDateValue_(a.submittedAt);
+  const bTime = parseDateValue_(b.submittedAt);
+  return bTime - aTime;
+}
+
+function parseDateValue_(value) {
+  const date = new Date(String(value || ""));
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function responseFromData_(data, params) {
+  const callback = sanitizeJsonpCallback_(params && params.callback);
+  if (callback) {
+    return ContentService
+      .createTextOutput(`${callback}(${JSON.stringify(data)})`)
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return jsonResponse_(data);
+}
+
+function sanitizeJsonpCallback_(value) {
+  const callback = String(value || "").trim();
+  if (!callback) return "";
+  return /^[A-Za-z0-9_.$]+$/.test(callback) ? callback : "";
 }
 
 function jsonResponse_(data) {
