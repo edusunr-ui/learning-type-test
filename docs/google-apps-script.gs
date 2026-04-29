@@ -3,6 +3,7 @@ const SHEET_NAME = "Results";
 
 // Optional: leave blank to save PDFs in My Drive root.
 const PDF_FOLDER_ID = "";
+const RESULT_TEMPLATE_BASE_URL = "https://edusunr-ui.github.io/learning-type-test/assets/results";
 
 const HEADERS = [
   "attemptId",
@@ -53,15 +54,15 @@ const RESULT_TYPES = {
   BDF: "칸트형",
 };
 
-const RESULT_SUMMARIES = {
-  "파스칼형": "과정을 분석하며 차근차근 이해를 쌓는 경향이 강합니다.",
-  "아인슈타인형": "직관과 호기심을 바탕으로 새로운 접근을 잘 시도합니다.",
-  "러셀형": "논리적 구조를 세우고 안정적으로 문제를 해결하는 편입니다.",
-  "가우스형": "빠른 패턴 인식과 계산 감각이 강점입니다.",
-  "뉴턴형": "목표 중심으로 계획을 세워 밀도 있게 학습합니다.",
-  "피타고라스형": "직관과 감각을 살려 문제 흐름을 빠르게 잡습니다.",
-  "데카르트형": "분석과 구조화를 통해 해결의 실마리를 찾습니다.",
-  "칸트형": "자기 방식으로 개념을 정리하며 이해를 깊게 만듭니다.",
+const RESULT_PDF_SLUGS = {
+  "파스칼형": "pascal",
+  "아인슈타인형": "einstein",
+  "러셀형": "russell",
+  "가우스형": "gauss",
+  "뉴턴형": "newton",
+  "피타고라스형": "pythagoras",
+  "데카르트형": "descartes",
+  "칸트형": "kant",
 };
 
 const LEVEL_DEFAULTS = {
@@ -77,7 +78,7 @@ function doPost(e) {
     const sheet = getSheet_();
     const rowIndex = findRowByAttemptId_(sheet, payload.attemptId);
     const existingRow = rowIndex > 0 ? getExistingRowMap_(sheet, rowIndex) : {};
-    const pdfInfo = createOrReplaceResultPdf_(result, existingRow);
+    const pdfInfo = copyTemplateResultPdf_(result, existingRow);
     const rowRecord = { ...result, ...pdfInfo };
     const rowValues = HEADERS.map((header) => rowRecord[header] || "");
 
@@ -224,7 +225,7 @@ function parseAnswers_(answersJson, questionCount) {
   return normalized;
 }
 
-function createOrReplaceResultPdf_(result, existingRow) {
+function copyTemplateResultPdf_(result, existingRow) {
   if (existingRow.resultPdfFileId) {
     try {
       DriveApp.getFileById(String(existingRow.resultPdfFileId)).setTrashed(true);
@@ -235,58 +236,7 @@ function createOrReplaceResultPdf_(result, existingRow) {
 
   const folder = getPdfFolder_();
   const pdfName = buildPdfName_(result);
-  const doc = DocumentApp.create(`TMP_${pdfName}`);
-  const body = doc.getBody();
-
-  body.clear();
-  body.appendParagraph("학습유형검사 결과 보고서")
-    .setHeading(DocumentApp.ParagraphHeading.HEADING1)
-    .setAlignment(DocumentApp.HorizontalAlignment.CENTER);
-
-  body.appendParagraph(`${result.name || "학생"} / ${result.school || "-"} / ${result.grade || "-"}학년 / ${result.levelLabel || "-"}`)
-    .setAlignment(DocumentApp.HorizontalAlignment.CENTER);
-
-  body.appendParagraph(`제출 시각: ${result.submittedAt || "-"}`)
-    .setAlignment(DocumentApp.HorizontalAlignment.CENTER);
-
-  body.appendParagraph("");
-  body.appendParagraph(`결과 유형: ${result.resultType} (${result.resultCode})`)
-    .setHeading(DocumentApp.ParagraphHeading.HEADING2);
-
-  body.appendParagraph(RESULT_SUMMARIES[result.resultType] || "학습유형검사 결과 요약입니다.");
-
-  body.appendParagraph("");
-  body.appendParagraph("영역별 점수")
-    .setHeading(DocumentApp.ParagraphHeading.HEADING2);
-
-  body.appendTable([
-    ["영역", "점수"],
-    ["긍정형", result.positiveScore],
-    ["부정형", result.negativeScore],
-    ["내적동기형", result.internalScore],
-    ["외적동기형", result.externalScore],
-    ["논리적 접근형", result.logicalScore],
-    ["직관적 접근형", result.intuitiveScore],
-  ]);
-
-  body.appendParagraph("");
-  body.appendParagraph("비교 결과")
-    .setHeading(DocumentApp.ParagraphHeading.HEADING2);
-  body.appendParagraph(`긍정형 vs 부정형: ${result.positiveVsNegative}`);
-  body.appendParagraph(`내적동기형 vs 외적동기형: ${result.internalVsExternal}`);
-  body.appendParagraph(`논리적 접근형 vs 직관적 접근형: ${result.logicalVsIntuitive}`);
-
-  body.appendParagraph("");
-  body.appendParagraph("원본 응답")
-    .setHeading(DocumentApp.ParagraphHeading.HEADING2);
-  body.appendParagraph(result.answersJson);
-
-  doc.saveAndClose();
-
-  const docFile = DriveApp.getFileById(doc.getId());
-  const pdfBlob = docFile.getAs(MimeType.PDF).setName(pdfName);
-  const pdfFile = folder.createFile(pdfBlob);
-  docFile.setTrashed(true);
+  const pdfFile = folder.createFile(fetchTemplatePdfBlob_(result).setName(pdfName));
 
   return {
     resultPdfFileId: pdfFile.getId(),
@@ -300,6 +250,23 @@ function getPdfFolder_() {
     return DriveApp.getRootFolder();
   }
   return DriveApp.getFolderById(PDF_FOLDER_ID);
+}
+
+function fetchTemplatePdfBlob_(result) {
+  const slug = RESULT_PDF_SLUGS[result.resultType];
+  if (!slug) {
+    throw new Error(`Unknown resultType for PDF template: ${result.resultType}`);
+  }
+
+  const templateUrl = `${RESULT_TEMPLATE_BASE_URL}/${slug}.pdf`;
+  const response = UrlFetchApp.fetch(templateUrl, { muteHttpExceptions: true });
+  const statusCode = response.getResponseCode();
+
+  if (statusCode !== 200) {
+    throw new Error(`Result PDF template fetch failed: ${statusCode} ${templateUrl}`);
+  }
+
+  return response.getBlob();
 }
 
 function buildPdfName_(result) {
