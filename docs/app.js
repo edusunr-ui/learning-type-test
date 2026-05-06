@@ -22,6 +22,12 @@
   },
 };
 
+const GRADE_OPTIONS = {
+  elementary: ["1", "2", "3", "4", "5", "6"],
+  middle: ["1", "2", "3"],
+  high: ["1", "2", "3"],
+};
+
 const CATEGORIES = [
   { key: "positive", label: "긍정형", code: "A" },
   { key: "negative", label: "부정형", code: "B" },
@@ -83,6 +89,10 @@ const els = {
 
 function currentLevel() {
   return LEVELS[state.level];
+}
+
+function gradeOptionsForLevel(level = state.level) {
+  return GRADE_OPTIONS[level] || ["1", "2", "3"];
 }
 
 function answerKey(level = state.level) {
@@ -276,8 +286,9 @@ function render() {
     tab.classList.toggle("is-active", tab.dataset.level === state.level);
   });
 
+  renderGradeOptions();
   els.school.value = state.info.school;
-  els.grade.value = ["1", "2", "3"].includes(state.info.grade) ? state.info.grade : "";
+  els.grade.value = gradeOptionsForLevel().includes(state.info.grade) ? state.info.grade : "";
   els.name.value = state.info.name;
 
   state.currentQuestion = Math.min(Math.max(1, state.currentQuestion), level.questionCount);
@@ -303,7 +314,7 @@ function render() {
 }
 
 function validateInfo() {
-  if (state.info.grade && !["1", "2", "3"].includes(state.info.grade)) {
+  if (state.info.grade && !gradeOptionsForLevel().includes(state.info.grade)) {
     state.info.grade = "";
     els.grade.value = "";
   }
@@ -319,6 +330,18 @@ function validateInfo() {
   alert(`${missing[0]}을 입력해 주세요.`);
   missing[2]?.focus();
   return false;
+}
+
+function renderGradeOptions() {
+  const allowedGrades = gradeOptionsForLevel();
+  const currentValue = allowedGrades.includes(state.info.grade) ? state.info.grade : "";
+
+  els.grade.innerHTML = [
+    '<option value="">선택</option>',
+    ...allowedGrades.map((grade) => `<option value="${grade}">${grade}학년</option>`),
+  ].join("");
+
+  els.grade.value = currentValue;
 }
 
 function createQuestionCard(questionNumber, value) {
@@ -522,7 +545,7 @@ function bindEvents() {
     const syncValue = () => {
       const value = input.value.trim();
       state.info[key] = key === "grade"
-        ? (["1", "2", "3"].includes(value) ? value : "")
+        ? (gradeOptionsForLevel().includes(value) ? value : "")
         : value;
       saveState();
     };
